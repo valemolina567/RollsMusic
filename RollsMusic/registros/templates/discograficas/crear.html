@@ -1,0 +1,12 @@
+<h1>Crear Discográfica</h1>
+<a href="{% url 'listar_discograficas' %}">⬅️ Cancelar y volver</a>
+<br><br>
+<form method="POST">
+    {% csrf_token %}
+    <input type="text" name="nombre" placeholder="Nombre de Empresa" required><br>
+    <input type="text" name="pais" placeholder="País Sede" required><br>
+    <label>Fecha de Fundación:</label><br>
+    <input type="date" name="fechaFundacion" required><br>
+    <input type="text" name="logo" placeholder="Nombre de archivo logo (ej: sony.png)"><br>
+    <button type="submit">Guardar</button>
+</form>

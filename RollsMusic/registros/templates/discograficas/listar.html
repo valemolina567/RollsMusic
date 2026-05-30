@@ -1,0 +1,23 @@
+<h1>Discográficas Registradas</h1>
+<a href="{% url 'index' %}">⬅️ Volver al Panel</a> | <a href="{% url 'crear_discografica' %}">Añadir Discográfica</a>
+<br><br>
+<table border="1">
+    <tr>
+        <th>ID</th><th>Nombre</th><th>País</th><th>Fundación</th><th>Acciones</th>
+    </tr>
+    {% for item in items %}
+    <tr>
+        <td>{{ item.idDiscografica }}</td>
+        <td>{{ item.nombre }}</td>
+        <td>{{ item.pais }}</td>
+        <td>{{ item.fechaFundacion }}</td>
+        <td>
+            <a href="{% url 'editar_discografica' item.idDiscografica %}">Editar</a>
+            <form action="{% url 'eliminar_discografica' item.idDiscografica %}" method="POST" style="display:inline;">
+                {% csrf_token %}
+                <button type="submit" onclick="return confirm('¿Eliminar discográfica?')">Eliminar</button>
+            </form>
+        </td>
+    </tr>
+    {% endfor %}
+</table>

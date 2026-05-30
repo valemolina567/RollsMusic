@@ -1,0 +1,20 @@
+<h1>Álbumes en Plataforma</h1>
+<a href="{% url 'index' %}">⬅️ Volver al Panel</a> | <a href="{% url 'crear_album' %}">Añadir Álbum</a>
+<br><br>
+<table border="1">
+    <tr><th>ID</th><th>Título</th><th>Lanzamiento</th><th>Artista</th><th>Acciones</th></tr>
+    {% for item in items %}
+    <tr>
+        <td>{{ item.idAlbum }}</td>
+        <td>{{ item.titulo }}</td>
+        <td>{{ item.fechaLanzamiento }}</td>
+        <td>{{ item.Artista_idArtista.nombre }}</td>
+        <td>
+            <a href="{% url 'editar_album' item.idAlbum %}">Editar</a>
+            <form action="{% url 'eliminar_album' item.idAlbum %}" method="POST" style="display:inline;">{% csrf_token %}
+                <button type="submit">Eliminar</button>
+            </form>
+        </td>
+    </tr>
+    {% endfor %}
+</table>

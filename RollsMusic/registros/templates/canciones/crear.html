@@ -1,0 +1,19 @@
+<h1>Publicar Canción</h1>
+<a href="{% url 'listar_canciones' %}">⬅️ Cancelar y volver</a>
+<form method="POST">
+    {% csrf_token %}
+    <input type="text" name="titulo" placeholder="Nombre del track" required><br>
+    <input type="number" name="duracion" placeholder="Duración en segundos" required><br>
+    <input type="number" name="numeroPista" placeholder="Número de pista" required><br>
+    <input type="date" name="fechaLanzamiento" required><br>
+    <select name="calidadAudio">
+        <option value="Alta">Alta</option>
+        <option value="Media">Media</option>
+        <option value="Baja">Baja</option>
+    </select><br>
+    <label>Álbum:</label><br>
+    <select name="album">
+        {% for al in albumes %}<option value="{{ al.idAlbum }}">{{ al.titulo }}</option>{% endfor %}
+    </select><br><br>
+    <button type="submit">Guardar</button>
+</form>

@@ -1,0 +1,30 @@
+<h1>Listado de Usuarios</h1>
+<a href="{% url 'index' %}">⬅️ Volver al Panel</a> | <a href="{% url 'crear_usuario' %}">➕ Registrar Nuevo Usuario</a>
+
+<br><br>
+
+<table border="1">
+    <tr>
+        <th>ID</th>
+        <th>Nombre</th>
+        <th>Correo</th>
+        <th>Estado</th>
+        <th>Acciones</th>
+    </tr>
+    {% for usuario in usuarios %}
+    <tr>
+        <td>{{ usuario.idUsuario }}</td>
+        <td>{{ usuario.nombre }} {{ usuario.apellido }}</td>
+        <td>{{ usuario.correo }}</td>
+        <td>{{ usuario.estado }}</td>
+        <td>
+            <a href="{% url 'editar_usuario' usuario.idUsuario %}">Editar</a>
+            
+            <form action="{% url 'eliminar_usuario' usuario.idUsuario %}" method="POST" style="display:inline;">
+                {% csrf_token %}
+                <button type="submit" onclick="return confirm('¿Seguro?')">Eliminar</button>
+            </form>
+        </td>
+    </tr>
+    {% endfor %}
+</table>

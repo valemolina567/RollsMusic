@@ -1,0 +1,22 @@
+<h1>Inventario de Canciones</h1>
+<a href="{% url 'index' %}">⬅️ Volver al Panel</a> | <a href="{% url 'crear_cancion' %}">Subir Canción</a>
+<br><br>
+<table border="1">
+    <tr><th>ID</th><th>Título</th><th>Duración (seg)</th><th>Pista #</th><th>Álbum</th><th>Calidad</th><th>Acciones</th></tr>
+    {% for item in items %}
+    <tr>
+        <td>{{ item.idCancion }}</td>
+        <td>{{ item.titulo }}</td>
+        <td>{{ item.duracion }}</td>
+        <td>{{ item.numeroPista }}</td>
+        <td>{{ item.Album_idAlbum.titulo }}</td>
+        <td>{{ item.calidadAudio }}</td>
+        <td>
+            <a href="{% url 'editar_cancion' item.idCancion %}">Editar</a>
+            <form action="{% url 'eliminar_cancion' item.idCancion %}" method="POST" style="display:inline;">{% csrf_token %}
+                <button type="submit">Borrar</button>
+            </form>
+        </td>
+    </tr>
+    {% endfor %}
+</table>

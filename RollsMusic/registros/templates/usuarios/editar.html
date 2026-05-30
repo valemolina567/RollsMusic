@@ -1,0 +1,30 @@
+<h1>Editar Usuario: {{ usuario.nombre }} {{ usuario.apellido }}</h1>
+
+{% if messages %}
+    <ul>
+        {% for message in messages %}
+            <li style="color:red">{{ message }}</li>
+        {% endfor %}
+    </ul>
+{% endif %}
+
+<a href="{% url 'listar_usuarios' %}">⬅️ Cancelar y volver</a>
+<br><br>
+
+<form method="POST">
+    {% csrf_token %}
+    
+    <label for="nombre">Nombre:</label><br>
+    <input type="text" id="nombre" name="nombre" value="{{ usuario.nombre }}" required><br><br>
+    
+    <label for="apellido">Apellido:</label><br>
+    <input type="text" id="apellido" name="apellido" value="{{ usuario.apellido }}" required><br><br>
+    
+    <label for="correo">Correo Electrónico:</label><br>
+    <input type="email" id="correo" name="correo" value="{{ usuario.correo }}" required><br><br>
+    
+    <label for="estado">Estado de la cuenta:</label><br>
+    <input type="text" id="estado" name="estado" value="{{ usuario.estado }}" required><br><br>
+    
+    <button type="submit">💾 Actualizar</button>
+</form>

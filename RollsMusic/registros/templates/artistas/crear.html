@@ -1,0 +1,42 @@
+<h1>Agregar Artista</h1>
+<a href="{% url 'listar_artistas' %}">⬅️ Cancelar y volver</a>
+<br><br>
+<form method="POST">
+    {% csrf_token %}
+    
+    <div class="form-group">
+        <label for="usuario">Seleccionar Usuario Cuenta:</label>
+        <select name="usuario" id="usuario" class="form-control" required>
+            <option value="">-- Seleccione el usuario --</option>
+            {% for usu in usuarios_artistas %}
+                <option value="{{ usu.idUsuario }}">{{ usu.nombre }} {{ usu.apellido }} ({{ usu.correo }})</option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <div class="form-group">
+        <label for="nombreArtistico">Nombre Artístico:</label>
+        <input type="text" name="nombreArtistico" id="nombreArtistico" class="form-control" required>
+    </div>
+
+    <div class="form-group">
+        <label for="generoPrincipal">Género Principal:</label>
+        <input type="text" name="generoPrincipal" id="generoPrincipal" class="form-control" required>
+    </div>
+
+    <div class="form-group">
+        <label for="biografia">Biografía:</label>
+        <textarea name="biografia" id="biografia" class="form-control"></textarea>
+    </div>
+
+    <div class="form-group">
+        <label for="discografica">Discográfica:</label>
+        <select name="discografica" id="discografica" class="form-control" required>
+            {% for disco in discograficas %}
+                <option value="{{ disco.idDiscografica }}">{{ disco.nombre }}</option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <button type="submit" class="btn btn-primary">Registrar Artista</button>
+</form>

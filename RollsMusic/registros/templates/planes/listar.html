@@ -1,0 +1,20 @@
+<h1>Planes de Suscripción</h1>
+<a href="{% url 'index' %}">⬅️ Volver al Panel</a> | <a href="{% url 'crear_plan' %}">Nuevo Plan</a>
+<br><br>
+<table border="1">
+    <tr><th>ID</th><th>Nombre del Plan</th><th>Precio ($)</th><th>Duración (Días)</th><th>Acciones</th></tr>
+    {% for item in items %}
+    <tr>
+        <td>{{ item.idPlan }}</td>
+        <td>{{ item.nombre }}</td>
+        <td>{{ item.precio }}</td>
+        <td>{{ item.duracionDias }}</td>
+        <td>
+            <a href="{% url 'editar_plan' item.idPlan %}">Editar</a>
+            <form action="{% url 'eliminar_plan' item.idPlan %}" method="POST" style="display:inline;">{% csrf_token %}
+                <button type="submit">Eliminar</button>
+            </form>
+        </td>
+    </tr>
+    {% endfor %}
+</table>

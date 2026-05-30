@@ -1,0 +1,18 @@
+<h1>Géneros Musicales</h1>
+<a href="{% url 'index' %}">⬅️ Volver al Panel</a> | <a href="{% url 'crear_genero' %}">Nuevo Género</a>
+<br><br>
+<table border="1">
+    <tr><th>ID</th><th>Género</th><th>Acciones</th></tr>
+    {% for item in items %}
+    <tr>
+        <td>{{ item.idGenero }}</td>
+        <td>{{ item.nombre }}</td>
+        <td>
+            <a href="{% url 'editar_genero' item.idGenero %}">Editar</a>
+            <form action="{% url 'eliminar_genero' item.idGenero %}" method="POST" style="display:inline;">{% csrf_token %}
+                <button type="submit">Eliminar</button>
+            </form>
+        </td>
+    </tr>
+    {% endfor %}
+</table>

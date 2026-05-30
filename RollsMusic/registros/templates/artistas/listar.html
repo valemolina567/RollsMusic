@@ -1,0 +1,33 @@
+<h1>Artistas de Rolls Music</h1>
+<a href="{% url 'index' %}">⬅️ Volver al Panel</a> | <a href="{% url 'crear_artista' %}">Registrar Artista</a>
+<br><br>
+<table border="1">
+    <tr>
+        <th>ID</th>
+        <th>Nombre Artístico</th>
+        <th>Nombre Real (Usuario)</th>
+        <th>Género Principal</th>
+        <th>Verificado</th>
+        <th>Discográfica</th>
+        <th>Acciones</th>
+    </tr>
+    {% for item in items %}
+    <tr>
+        <td>{{ item.idArtista }}</td>
+        <td>{{ item.nombreArtistico }}</td>
+        <td>{{ item.Usuario_idUsuario.nombre }} {{ item.Usuario_idUsuario.apellido }}</td>
+        <td>{{ item.generoPrincipal }}</td>
+        <td>
+            {% if item.verificado %} Sí ✅ {% else %} No ❌ {% endif %}
+        </td>
+        <td>{{ item.Discografica_idDiscografica.nombre }}</td>
+        <td>
+            <a href="{% url 'editar_artista' item.idArtista %}">Editar</a>
+            <form action="{% url 'eliminar_artista' item.idArtista %}" method="POST" style="display:inline;">
+                {% csrf_token %}
+                <button type="submit">Eliminar</button>
+            </form>
+        </td>
+    </tr>
+    {% endfor %}
+</table>

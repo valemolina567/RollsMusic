@@ -1,0 +1,7 @@
+<h1>Editar Género</h1>
+<a href="{% url 'listar_generos' %}">⬅️ Cancelar y volver</a>
+<form method="POST">
+    {% csrf_token %}
+    <input type="text" name="nombre" value="{{ item.nombre }}" required><br>
+    <button type="submit">Actualizar</button>
+</form>

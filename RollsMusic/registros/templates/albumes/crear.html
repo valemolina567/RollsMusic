@@ -1,0 +1,15 @@
+<h1>Crear Álbum</h1>
+<a href="{% url 'listar_albumes' %}">⬅️ Cancelar y volver</a>
+<br><br>
+
+<form method="POST">
+    {% csrf_token %}
+    <input type="text" name="titulo" placeholder="Título del álbum" required><br>
+    <input type="date" name="fechaLanzamiento" required><br>
+    <select name="artista" required>
+        {% for a in artistas %} 
+            <option value="{{ a.idArtista }}">{{ a.nombreArtistico }}</option> 
+        {% endfor %}
+    </select><br><br>
+    <button type="submit">Guardar</button>
+</form>

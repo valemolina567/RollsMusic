@@ -1,0 +1,13 @@
+<h1>Editar Álbum</h1>
+<a href="{% url 'listar_albumes' %}">⬅️ Cancelar y volver</a>
+<form method="POST">
+    {% csrf_token %}
+    <input name="titulo" value="{{ item.titulo }}"><br>
+    <input type="date" name="fechaLanzamiento" value="{{ item.fechaLanzamiento|date:'Y-m-d' }}"><br>
+    <select name="artista">
+        {% for a in artistas %}
+            <option value="{{ a.idArtista }}" {% if a.idArtista == item.Artista_idArtista.idArtista %}selected{% endif %}>{{ a.nombre }}</option>
+        {% endfor %}
+    </select><br><br>
+    <button type="submit">Actualizar</button>
+</form>

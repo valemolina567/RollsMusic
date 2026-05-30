@@ -1,0 +1,45 @@
+<h1>Crear Nuevo Usuario</h1>
+
+{% if messages %}
+    <ul>
+        {% for message in messages %}
+            <li style="color:red">{{ message }}</li>
+        {% endfor %}
+    </ul>
+{% endif %}
+
+<a href="{% url 'listar_usuarios' %}">⬅️ Cancelar y volver</a>
+<br><br>
+
+<form method="POST">
+    {% csrf_token %}
+
+    <label for="fechaNacimiento">Fecha de Nacimiento:</label><br>
+    <input type="date" id="fechaNacimiento" name="fechaNacimiento" required><br><br>
+    
+    <label for="nombre">Nombre:</label><br>
+    <input type="text" id="nombre" name="nombre" placeholder="Nombre" required><br><br>
+    
+    <label for="apellido">Apellido:</label><br>
+    <input type="text" id="apellido" name="apellido" placeholder="Apellido" required><br><br>
+    
+    <label for="correo">Correo Electrónico:</label><br>
+    <input type="email" id="correo" name="correo" placeholder="ejemplo@correo.com" required><br><br>
+    
+    <label for="contrasenia">Contraseña:</label><br>
+    <input type="password" id="contrasenia" name="contrasenia" placeholder="Contraseña" required><br><br>    
+
+    <div class="form-group">
+        <label for="rol">Rol del Usuario:</label>
+        <select name="rol" id="rol" class="form-control">
+            {% for rol in roles %}
+            <option value="{{ rol.idRol }}" {% if rol.idRol == 2 %}selected{% endif %}>
+                {{ rol.nombre }}
+            </option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <button type="submit">➕ Guardar Usuario</button>
+
+</form>

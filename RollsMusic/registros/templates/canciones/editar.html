@@ -1,0 +1,33 @@
+<h1>Editar Registro de Canción</h1>
+<a href="{% url 'listar_canciones' %}">⬅️ Cancelar y volver</a>
+<form method="POST">
+    {% csrf_token %}
+    
+    <label for="titulo">Nombre del track:</label><br>
+    <input type="text" id="titulo" name="titulo" value="{{ item.titulo }}" required><br><br>
+    
+    <label for="duracion">Duración en segundos:</label><br>
+    <input type="number" id="duracion" name="duracion" value="{{ item.duracion }}" required><br><br>
+    
+    <label for="numeroPista">Número de pista:</label><br>
+    <input type="number" id="numeroPista" name="numeroPista" value="{{ item.numeroPista }}" required><br><br>
+    
+    <label for="fechaLanzamiento">Fecha de Lanzamiento:</label><br>
+    <input type="date" id="fechaLanzamiento" name="fechaLanzamiento" value="{{ item.fechaLanzamiento|date:'Y-m-d' }}" required><br><br>
+    
+    <label for="calidadAudio">Calidad de Audio:</label><br>
+    <select name="calidadAudio" id="calidadAudio">
+        <option value="Alta" {% if item.calidadAudio == 'Alta' %}selected{% endif %}>Alta</option>
+        <option value="Media" {% if item.calidadAudio == 'Media' %}selected{% endif %}>Media</option>
+        <option value="Baja" {% if item.calidadAudio == 'Baja' %}selected{% endif %}>Baja</option>
+    </select><br><br>
+    
+    <label for="album">Álbum:</label><br>
+    <select name="album" id="album">
+        {% for al in albumes %}
+            <option value="{{ al.idAlbum }}" {% if al.idAlbum == item.Album_idAlbum.idAlbum %}selected{% endif %}>{{ al.titulo }}</option>
+        {% endfor %}
+    </select><br><br>
+    
+    <button type="submit">Actualizar</button>
+</form>

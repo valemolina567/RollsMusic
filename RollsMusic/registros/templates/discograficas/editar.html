@@ -1,0 +1,20 @@
+<h1>Editar Discográfica</h1>
+<a href="{% url 'listar_discograficas' %}">⬅️ Cancelar y volver</a>
+<br><br>
+<form method="POST">
+    {% csrf_token %}
+    
+    <label for="nombre">Nombre de Empresa:</label><br>
+    <input type="text" id="nombre" name="nombre" value="{{ item.nombre }}" required><br><br>
+    
+    <label for="pais">País Sede:</label><br>
+    <input type="text" id="pais" name="pais" value="{{ item.pais }}" required><br><br>
+    
+    <label for="fechaFundacion">Fecha de Fundación:</label><br>
+    <input type="date" id="fechaFundacion" name="fechaFundacion" value="{{ item.fechaFundacion|date:'Y-m-d' }}" required><br><br>
+    
+    <label for="logo">Nombre de archivo logo:</label><br>
+    <input type="text" id="logo" name="logo" value="{{ item.logo }}"><br><br>
+    
+    <button type="submit">Actualizar</button>
+</form>
