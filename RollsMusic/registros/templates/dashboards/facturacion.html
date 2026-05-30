@@ -1,0 +1,76 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pasarela de Pago - RollsMusic</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+    <style>
+        :root { --rm-bg: #111111; --rm-surface: #1E1E1E; --rm-accent: #00AEEF; --rm-text-primary: #FFFFFF; --rm-text-secondary: #CCCCCC; }
+        body { background-color: var(--rm-bg); color: var(--rm-text-primary); font-family: 'Segoe UI', sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
+        .text-muted { color: var(--rm-text-secondary) !important; }
+        .checkout-card { background-color: var(--rm-surface); border-radius: 8px; border: 1px solid #333; padding: 40px; width: 100%; max-width: 480px; box-shadow: 0 10px 30px rgba(0,0,0,0.6); }
+        .logo-img { max-width: 100px; height: auto; display: block; margin: 0 auto 15px auto; }
+        .price-summary { background-color: #000; border-radius: 6px; padding: 20px; text-align: center; margin-bottom: 25px; border: 1px solid #333; }
+        .total-label { color: var(--rm-text-secondary); text-transform: uppercase; font-size: 0.85rem; font-weight: 700; margin-bottom: 5px; }
+        .total-value { font-size: 2.8rem; font-weight: 800; color: var(--rm-text-primary); }
+        
+        .payment-option { display: block; position: relative; padding: 15px 20px 15px 50px; margin-bottom: 10px; background-color: transparent; border: 2px solid #444; border-radius: 6px; cursor: pointer; transition: all 0.2s; }
+        .payment-option:hover { background-color: #252525; border-color: #666; }
+        .payment-option input[type="radio"] { position: absolute; left: 20px; top: 50%; transform: translateY(-50%); width: 18px; height: 18px; cursor: pointer; }
+        .payment-option:has(input[type="radio"]:checked) { border-color: var(--rm-accent); background-color: rgba(0, 174, 239, 0.05); }
+        .option-content { display: flex; align-items: center; gap: 10px; font-weight: 600; color: var(--rm-text-primary); }
+        .option-icon { font-size: 1.2rem; color: var(--rm-accent); }
+
+        .btn-rm-checkout { background-color: var(--rm-accent); color: #fff; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; border-radius: 4px; padding: 16px; border: none; width: 100%; transition: background-color 0.2s; font-size: 1.1rem; }
+        .btn-rm-checkout:hover { background-color: #008cc2; color: #fff; }
+    </style>
+</head>
+<body>
+
+    <div class="checkout-card">
+        <img src="{% static 'images/RollsMusic.png' %}" alt="RollsMusic Logo" class="logo-img">
+        <h3 class="fw-bold text-center mb-3">Finalizar Suscripción</h3>
+        
+        <div class="price-summary">
+            <div class="total-label">Estás comprando: Plan Premium</div>
+            <div class="total-value">$9.99 <span class="fs-6 fw-normal text-muted">/mes</span></div>
+        </div>
+
+        <form action="{% url 'procesar_pago' %}" method="POST">
+            {% csrf_token %}
+            <label class="form-label mb-3 fw-bold">Selecciona tu método de pago:</label>
+            
+            <label class="payment-option">
+                <input type="radio" name="metodo" value="Tarjeta" checked required>
+                <div class="option-content">
+                    <i class="bi bi-credit-card-2-front option-icon"></i> Tarjeta de Crédito / Débito
+                </div>
+            </label>
+
+            <label class="payment-option">
+                <input type="radio" name="metodo" value="PayPal" required>
+                <div class="option-content">
+                    <i class="bi bi-paypal option-icon"></i> Cuenta de PayPal
+                </div>
+            </label>
+
+            <label class="payment-option">
+                <input type="radio" name="metodo" value="Transferencia" required>
+                <div class="option-content">
+                    <i class="bi bi-bank option-icon"></i> Transferencia Bancaria
+                </div>
+            </label>
+
+            <button type="submit" class="btn btn-rm-checkout mt-4 mb-3">Pagar Suscripción Premium</button>
+            
+            <div class="text-center mt-2">
+                <a href="{% url 'dashboard_usuario' %}" class="text-decoration-none small text-muted fw-bold">Cancelar y volver</a>
+            </div>
+        </form>
+    </div>
+
+</body>
+</html>

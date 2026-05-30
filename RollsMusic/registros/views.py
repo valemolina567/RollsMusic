@@ -3,7 +3,38 @@ from django.contrib import messages
 from datetime import date
 # Se añade 'Rol' a las importaciones
 from .models import Usuario, Discografica, Artista, Album, Cancion, Genero, PlanEntity, Rol
+from django.db import connection
+from django.db import DatabaseError
+from functools import wraps
 
+def verificar_rol(roles_permitidos):
+    """Decorador para restringir el acceso a vistas según el rol de la sesión."""
+    def decorator(view_func):
+        @wraps(view_func)
+        def _wrapped_view(request, *args, **kwargs):
+            # 1. Validar si el usuario está autenticado en la sesión
+            if 'usuario_id' not in request.session:
+                messages.error(request, "Debes iniciar sesión para acceder a esta sección.")
+                return redirect('login')
+            
+            # 2. Validar si su rol coincide con los permitidos
+            rol_usuario = request.session.get('usuario_rol')
+            if rol_usuario not in roles_permitidos:
+                messages.error(request, f"Acceso denegado. Tu rol de '{rol_usuario}' no tiene permisos para esta acción.")
+                
+                # Redirección inteligente según su rol actual
+                if rol_usuario == 'Artista':
+                    return redirect('dashboard_artista')
+                elif rol_usuario == 'Cliente':
+                    return redirect('dashboard_usuario')
+                else:
+                    return redirect('login')
+                    
+            return view_func(request, *args, **kwargs)
+        return _wrapped_view
+    return decorator    
+
+@verificar_rol(['Admin'])
 def listar_usuarios(request):
     # Si no existe la variable en sesión, lo mandamos directo al login
     if 'usuario_id' not in request.session:
@@ -14,16 +45,19 @@ def listar_usuarios(request):
     return render(request, 'usuarios/listar.html', {'usuarios': usuarios})
 
 # PANEL DE INICIO GENERAL
+@verificar_rol(['Admin'])
 def index(request):
     return render(request, 'index.html')
 
 # ==========================================
 # CRUD: DISCOGRAFICAS
 # ==========================================
+@verificar_rol(['Admin'])
 def listar_discograficas(request):
     items = Discografica.objects.all()
     return render(request, 'discograficas/listar.html', {'items': items})
 
+@verificar_rol(['Admin'])
 def crear_discografica(request):
     if request.method == 'POST':
         nombre = request.POST.get('nombre', '').strip()
@@ -40,6 +74,7 @@ def crear_discografica(request):
         return redirect('listar_discograficas')
     return render(request, 'discograficas/crear.html')
 
+@verificar_rol(['Admin'])
 def editar_discografica(request, id):
     item = get_object_or_404(Discografica, idDiscografica=id)
     if request.method == 'POST':
@@ -51,6 +86,7 @@ def editar_discografica(request, id):
         return redirect('listar_discograficas')
     return render(request, 'discograficas/editar.html', {'item': item})
 
+@verificar_rol(['Admin'])
 def eliminar_discografica(request, id):
     item = get_object_or_404(Discografica, idDiscografica=id)
     if request.method == 'POST':
@@ -63,10 +99,12 @@ def eliminar_discografica(request, id):
 # ==========================================
 # CRUD: ARTISTAS (Corregido estructuralmente)
 # ==========================================
+@verificar_rol(['Admin'])
 def listar_artistas(request):
     items = Artista.objects.all()
     return render(request, 'artistas/listar.html', {'items': items})
 
+@verificar_rol(['Admin'])
 def crear_artista(request):
     discograficas = Discografica.objects.all()
     
@@ -93,6 +131,7 @@ def crear_artista(request):
         'discograficas': discograficas
     })
 
+@verificar_rol(['Admin'])
 def editar_artista(request, id):
     item = get_object_or_404(Artista, idArtista=id)
     discograficas = Discografica.objects.all()
@@ -108,6 +147,7 @@ def editar_artista(request, id):
         
     return render(request, 'artistas/editar.html', {'item': item, 'discograficas': discograficas})
 
+@verificar_rol(['Admin'])
 def eliminar_artista(request, id):
     item = get_object_or_404(Artista, idArtista=id)
     if request.method == 'POST':
@@ -117,10 +157,12 @@ def eliminar_artista(request, id):
 # ==========================================
 # CRUD: ALBUMES
 # ==========================================
+@verificar_rol(['Admin'])
 def listar_albumes(request):
     items = Album.objects.all()
     return render(request, 'albumes/listar.html', {'items': items})
 
+@verificar_rol(['Admin'])
 def crear_album(request):
     artistas = Artista.objects.all()
     if request.method == 'POST':
@@ -133,6 +175,7 @@ def crear_album(request):
         return redirect('listar_albumes')
     return render(request, 'albumes/crear.html', {'artistas': artistas})
 
+@verificar_rol(['Admin'])
 def editar_album(request, id):
     item = get_object_or_404(Album, idAlbum=id)
     artistas = Artista.objects.all()
@@ -144,6 +187,7 @@ def editar_album(request, id):
         return redirect('listar_albumes')
     return render(request, 'albumes/editar.html', {'item': item, 'artistas': artistas})
 
+@verificar_rol(['Admin'])
 def eliminar_album(request, id):
     item = get_object_or_404(Album, idAlbum=id)
     if request.method == 'POST':
@@ -153,10 +197,12 @@ def eliminar_album(request, id):
 # ==========================================
 # CRUD: CANCIONES
 # ==========================================
+@verificar_rol(['Admin'])
 def listar_canciones(request):
     items = Cancion.objects.all()
     return render(request, 'canciones/listar.html', {'items': items})
 
+@verificar_rol(['Admin'])
 def crear_cancion(request):
     albumes = Album.objects.all()
     if request.method == 'POST':
@@ -175,6 +221,7 @@ def crear_cancion(request):
         return redirect('listar_canciones')
     return render(request, 'canciones/crear.html', {'albumes': albumes})
 
+@verificar_rol(['Admin'])
 def editar_cancion(request, id):
     item = get_object_or_404(Cancion, idCancion=id)
     albumes = Album.objects.all()
@@ -189,6 +236,7 @@ def editar_cancion(request, id):
         return redirect('listar_canciones')
     return render(request, 'canciones/editar.html', {'item': item, 'albumes': albumes})
 
+@verificar_rol(['Admin'])
 def eliminar_cancion(request, id):
     item = get_object_or_404(Cancion, idCancion=id)
     if request.method == 'POST':
@@ -198,10 +246,12 @@ def eliminar_cancion(request, id):
 # ==========================================
 # CRUD: GENEROS
 # ==========================================
+@verificar_rol(['Admin'])
 def listar_generos(request):
     items = Genero.objects.all()
     return render(request, 'generos/listar.html', {'items': items})
 
+@verificar_rol(['Admin'])
 def crear_genero(request):
     if request.method == 'POST':
         nombre = request.POST.get('nombre')
@@ -209,6 +259,7 @@ def crear_genero(request):
         return redirect('listar_generos')
     return render(request, 'generos/crear.html')
 
+@verificar_rol(['Admin'])
 def editar_genero(request, id):
     item = get_object_or_404(Genero, idGenero=id)
     if request.method == 'POST':
@@ -217,6 +268,7 @@ def editar_genero(request, id):
         return redirect('listar_generos')
     return render(request, 'generos/editar.html', {'item': item})
 
+@verificar_rol(['Admin'])
 def eliminar_genero(request, id):
     item = get_object_or_404(Genero, idGenero=id)
     if request.method == 'POST':
@@ -226,10 +278,12 @@ def eliminar_genero(request, id):
 # ==========================================
 # CRUD: PLANES
 # ==========================================
+@verificar_rol(['Admin'])
 def listar_planes(request):
     items = PlanEntity.objects.all()
     return render(request, 'planes/listar.html', {'items': items})
 
+@verificar_rol(['Admin'])
 def crear_plan(request):
     if request.method == 'POST':
         nombre = request.POST.get('nombre')
@@ -239,6 +293,7 @@ def crear_plan(request):
         return redirect('listar_planes')
     return render(request, 'planes/crear.html')
 
+@verificar_rol(['Admin'])
 def editar_plan(request, id):
     item = get_object_or_404(PlanEntity, idPlan=id)
     if request.method == 'POST':
@@ -249,6 +304,7 @@ def editar_plan(request, id):
         return redirect('listar_planes')
     return render(request, 'planes/editar.html', {'item': item})
 
+@verificar_rol(['Admin'])
 def eliminar_plan(request, id):
     item = get_object_or_404(PlanEntity, idPlan=id)
     if request.method == 'POST':
@@ -262,6 +318,7 @@ def listar_usuarios(request):
     usuarios = Usuario.objects.all()
     return render(request, 'usuarios/listar.html', {'usuarios': usuarios})
 
+@verificar_rol(['Admin'])
 def crear_usuario(request):
     if request.method == 'POST':
         nombre = request.POST.get('nombre', '').strip()
@@ -302,6 +359,7 @@ def crear_usuario(request):
     roles = Rol.objects.all()
     return render(request, 'usuarios/crear.html', {'roles': roles})
 
+@verificar_rol(['Admin'])
 def editar_usuario(request, id):
     usuario = get_object_or_404(Usuario, idUsuario=id)
     if request.method == 'POST':
@@ -315,6 +373,7 @@ def editar_usuario(request, id):
         return redirect('listar_usuarios') # Corregido
     return render(request, 'usuarios/editar.html', {'usuario': usuario})
 
+@verificar_rol(['Admin'])
 def eliminar_usuario(request, id):
     usuario = get_object_or_404(Usuario, idUsuario=id)
     if request.method == 'POST':
@@ -340,28 +399,275 @@ def login_view(request):
             return render(request, 'auth/login.html')
 
         try:
-            # Buscamos al usuario por su correo exacto
             usuario = Usuario.objects.get(correo=correo)
             
-            # Verificamos si la contraseña coincide
             if usuario.contrasenia == contrasenia:
                 if usuario.estado != 'Activo':
                     messages.error(request, f"Tu cuenta se encuentra: {usuario.estado}. Contacta al administrador.")
                     return render(request, 'auth/login.html')
                 
-                # --- GUARDAR EN SESIÓN MANUAL DE DJANGO ---
+                # Variables de sesión
                 request.session['usuario_id'] = usuario.idUsuario
                 request.session['usuario_nombre'] = f"{usuario.nombre} {usuario.apellido}"
-                request.session['usuario_rol'] = usuario.Rol_idRol.nombre  # Guardamos 'Admin', 'Cliente', etc.
+                request.session['usuario_rol'] = usuario.Rol_idRol.nombre
                 
-                messages.success(request, f"¡Bienvenido de nuevo, {usuario.nombre}!")
-                return redirect('index')  # Redirige al panel principal
+                # REDIRECCIÓN DINÁMICA POR ROL
+                if usuario.Rol_idRol.nombre == 'Admin':
+                    return redirect('index')
+                elif usuario.Rol_idRol.nombre == 'Artista':
+                    return redirect('dashboard_artista')
+                else:
+                    return redirect('dashboard_usuario')
             else:
                 messages.error(request, "Contraseña incorrecta.")
         except Usuario.DoesNotExist:
             messages.error(request, "El correo electrónico no está registrado.")
 
     return render(request, 'auth/login.html')
+
+def registro_view(request):
+    if request.method == 'POST':
+        # 1. Capturar los datos enviados por el usuario
+        nombre = request.POST.get('nombre', '').strip()
+        apellido = request.POST.get('apellido', '').strip()
+        correo = request.POST.get('correo', '').strip()
+        contrasenia = request.POST.get('contrasenia', '').strip()
+        fecha_nacimiento = request.POST.get('fecha_nacimiento', '').strip()
+        
+        # Validar que no existan campos vacíos
+        if not all([nombre, apellido, correo, contrasenia, fecha_nacimiento]):
+            messages.error(request, "Por favor, completa todos los campos obligatorios.")
+            return render(request, 'auth/registro.html')
+
+        # Asignamos una imagen por defecto, ya que es obligatoria en la base de datos
+        imagen_default = 'usuario_nuevo.png'
+        # El rol por defecto será 2 (Cliente)
+        rol_cliente = 2 
+
+        # 2. Ejecutar el Procedimiento Almacenado
+        with connection.cursor() as cursor:
+            try:
+                cursor.execute("""
+                    EXEC Usuarios.sp_RegistrarUsuario 
+                        @nombre = %s,
+                        @apellido = %s,
+                        @correo = %s,
+                        @contrasenia = %s,
+                        @imagen = %s,
+                        @fechaNacimiento = %s,
+                        @Rol_idRol = %s
+                """, [nombre, apellido, correo, contrasenia, imagen_default, fecha_nacimiento, rol_cliente])
+                
+                # El SP retorna: SELECT 1 AS Estado, 'Mensaje' AS Mensaje
+                resultado = cursor.fetchone()
+                
+                if resultado and resultado[0] == 1:
+                    # Registro exitoso
+                    messages.success(request, "¡Cuenta creada con éxito! Ahora puedes iniciar sesión.")
+                    return redirect('login')
+                else:
+                    # Error controlado desde el SP (ej. correo duplicado)
+                    error_msg = resultado[1] if resultado else "Error desconocido al registrar."
+                    messages.error(request, f"Error: {error_msg}")
+                    
+            except Exception as e:
+                # Error de ejecución o conexión
+                messages.error(request, f"Ocurrió un error en el servidor: {str(e)}")
+
+    # Si es método GET, solo mostramos el formulario vacío
+    return render(request, 'auth/registro.html')
+
+# ==========================================
+# DASHBOARDS E INTEGRACIÓN DE OBJETOS SQL
+# ==========================================
+
+def dictfetchall(cursor):
+    """Devuelve todas las filas de un cursor como un diccionario (clave-valor)."""
+    columns = [col[0] for col in cursor.description]
+    return [dict(zip(columns, row)) for row in cursor.fetchall()]
+
+@verificar_rol(['Cliente', 'Admin'])
+def dashboard_usuario(request):
+    if 'usuario_id' not in request.session or request.session.get('usuario_rol') not in ['Cliente', 'Admin']:
+        return redirect('login')
+        
+    usuario_id = request.session['usuario_id']
+    top_canciones = []
+    recomendaciones = []
+    
+    # Valores por defecto si no tiene registro de suscripción aún
+    plan_info = {'plan_nombre': 'Free', 'suscripcion_estado': 'Inactiva', 'idSuscripcion': None}
+    
+    with connection.cursor() as cursor:
+        # 1. Consulta SQL para obtener el plan y estado de suscripción del usuario
+        cursor.execute("""
+            SELECT TOP 1 P.nombre, S.estado, S.idSuscripcion
+            FROM Facturacion.Suscripcion S
+            INNER JOIN Facturacion.PlanEntity P ON S.PlanEntity_idPlan = P.idPlan
+            WHERE S.Usuario_idUsuario = %s
+            ORDER BY CASE WHEN S.estado = 'Activa' THEN 1 ELSE 2 END, S.idSuscripcion DESC
+        """, [usuario_id])
+        row = cursor.fetchone()
+        if row:
+            plan_info = {
+                'plan_nombre': row[0],
+                'suscripcion_estado': row[1],
+                'idSuscripcion': row[2]
+            }
+
+        # 2. Ejecutar Reporte: Top Canciones por Usuario
+        cursor.execute("EXEC Reportes.sp_TopCancionesUsuario @idUsuario = %s", [usuario_id])
+        top_canciones = dictfetchall(cursor)
+        
+        # 3. Ejecutar Reporte: Recomendaciones Personalizadas
+        cursor.execute("EXEC Reportes.sp_RecomendacionesPersonalizadas @idUsuario = %s", [usuario_id])
+        recomendaciones = dictfetchall(cursor)
+        
+    context = {
+        'top_canciones': top_canciones,
+        'recomendaciones': recommendations if 'recommendations' in locals() else recomendaciones,
+        'plan_info': plan_info,
+    }
+    return render(request, 'dashboards/usuario.html', context)
+
+@verificar_rol(['Artista', 'Admin'])
+def dashboard_artista(request):
+    if 'usuario_id' not in request.session or request.session.get('usuario_rol') not in ['Artista', 'Admin']:
+        return redirect('login')
+    
+    usuario_nombre = request.session.get('usuario_nombre').split()[0]
+    
+    # NOTA TÉCNICA: Como en su BD no hay una FK directa de Usuario -> Artista para saber 
+    # qué perfil le pertenece, buscaremos una coincidencia por nombre o cargaremos el primer artista a modo de Demo.
+    artista = Artista.objects.filter(nombreArtistico__icontains=usuario_nombre).first()
+    if not artista:
+        artista = Artista.objects.first()
+
+    total_regalias = 0
+    minutos_cancion_demo = 0
+    canciones_artista = []
+
+    if artista:
+        canciones_artista = Cancion.objects.filter(Album_idAlbum__Artista_idArtista=artista.idArtista)
+        cancion_demo_id = canciones_artista.first().idCancion if canciones_artista.exists() else None
+
+        # IMPLEMENTACIÓN DE FUNCIONES ESCALARES
+        with connection.cursor() as cursor:
+            # 1. Función Escalar: Total de regalías generadas por el artista
+            cursor.execute("SELECT Facturacion.fn_TotalRegaliaArtista(%s)", [artista.idArtista])
+            row = cursor.fetchone()
+            total_regalias = row[0] if row and row[0] else 0
+            
+            # 2. Función Escalar: Minutos Reproducidos (usando la pista principal del artista)
+            if cancion_demo_id:
+                cursor.execute("SELECT Usuarios.fn_MinutosReproduccionCancion(%s)", [cancion_demo_id])
+                row2 = cursor.fetchone()
+                minutos_cancion_demo = row2[0] if row2 and row2[0] else 0
+
+    context = {
+        'artista': artista,
+        'total_regalias': total_regalias,
+        'canciones_artista': canciones_artista,
+        'minutos_cancion_demo': minutos_cancion_demo,
+    }
+    return render(request, 'dashboards/artista.html', context)
+
+@verificar_rol(['Cliente', 'Admin'])
+def procesar_pago(request):
+    if 'usuario_id' not in request.session:
+        return redirect('login')
+        
+    usuario_id = request.session['usuario_id']
+    
+    if request.method == 'POST':
+        metodo = request.POST.get('metodo') # 'PayPal', 'Tarjeta' o 'Transferencia'
+        monto = 9.99  # Precio establecido para el plan Premium
+        
+        with connection.cursor() as cursor:
+            # 1. Validar si el usuario ya cuenta con un registro de suscripción Premium (Plan 2)
+            cursor.execute("""
+                SELECT idSuscripcion FROM Facturacion.Suscripcion 
+                WHERE Usuario_idUsuario = %s AND PlanEntity_idPlan = 2
+            """, [usuario_id])
+            row = cursor.fetchone()
+            
+            if row:
+                id_suscripcion = row[0]
+                cursor.execute("UPDATE Facturacion.Suscripcion SET estado = 'Activa' WHERE idSuscripcion = %s", [id_suscripcion])
+            else:
+                # Crear una nueva suscripción Premium activa por 30 días
+                cursor.execute("""
+                    INSERT INTO Facturacion.Suscripcion (fechaInicio, fechaFin, estado, Usuario_idUsuario, PlanEntity_idPlan)
+                    VALUES (GETDATE(), DATEADD(day, 30, GETDATE()), 'Activa', %s, 2)
+                """, [usuario_id])
+                cursor.execute("SELECT @@IDENTITY")
+                id_suscripcion = cursor.fetchone()[0]
+            
+            # 2. CONSUMO DE OBJETO PROGRAMABLE: Registrar el Pago ejecutando el SP
+            cursor.execute("""
+                EXEC Facturacion.sp_RegistrarPago 
+                    @monto = %s, 
+                    @metodo = %s, 
+                    @idSuscripcion = %s
+            """, [monto, metodo, id_suscripcion])
+            
+        messages.success(request, "¡Transacción completada! Tu cuenta ha sido actualizada a Premium ✨")
+        return redirect('dashboard_usuario')
+        
+    return render(request, 'dashboards/facturacion.html')
+
+@verificar_rol(['Admin'])
+def verificar_suscripciones(request):
+    # Verificación de seguridad: Solo el Admin puede ejecutar esto
+    if 'usuario_id' not in request.session or request.session.get('usuario_rol') != 'Admin':
+        messages.error(request, "Acceso denegado. Esta acción es exclusiva para administradores.")
+        return redirect('login')
+        
+    try:
+        with connection.cursor() as cursor:
+            # Consumo del Procedimiento Almacenado que contiene el Cursor
+            cursor.execute("EXEC Facturacion.sp_VerificarSuscripcionesVencidas")
+            
+        messages.success(request, "⚙️ Mantenimiento completado: El cursor ha verificado y actualizado las suscripciones vencidas exitosamente.")
+    except Exception as e:
+        messages.error(request, f"Error al ejecutar el cursor de mantenimiento: {str(e)}")
+        
+    return redirect('index')
+
+@verificar_rol(['Cliente', 'Admin'])
+def registrar_reproduccion(request, id_cancion):
+    usuario_id = request.session['usuario_id']
+    
+    with connection.cursor() as cursor:
+        try:
+            # 1. Obtener la duración de la canción para simular que se escuchó completa
+            cursor.execute("SELECT duracion, titulo FROM Catalogo.Cancion WHERE idCancion = %s", [id_cancion])
+            cancion = cursor.fetchone()
+            
+            if not cancion:
+                messages.error(request, "La canción seleccionada no existe.")
+                return redirect('dashboard_usuario')
+                
+            duracion_segundos = cancion[0]
+            titulo_cancion = cancion[1]
+
+            # 2. Inserción con los nombres de la tabla en SQL Server
+            cursor.execute("""
+                INSERT INTO Usuarios.Reproduccion 
+                (fechaHora, dispositivo, pais, duracionEscuchada, completada, Usuario_idUsuario, Cancion_idCancion)
+                VALUES 
+                (GETDATE(), 'Navegador Web', 'Ecuador', %s, 1, %s, %s)
+            """, [duracion_segundos, usuario_id, id_cancion])
+            
+            messages.success(request, f"▶️ Reproduciendo ahora: '{titulo_cancion}'. ¡Historial y métricas actualizados!")
+            
+        except DatabaseError as db_err:
+            # Si el Trigger trg_ValidarReproduccion lanza un RAISERROR, caerá aquí
+            messages.error(request, f"La base de datos rechazó la reproducción: {str(db_err)}")
+        except Exception as e:
+            messages.error(request, f"Error en el sistema: {str(e)}")
+            
+    return redirect('dashboard_usuario')
 
 
 def logout_view(request):

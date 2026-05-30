@@ -4,6 +4,7 @@ from . import views
 urlpatterns = [
     # Panel Principal
     path('', views.index, name='index'),
+    path('mantenimiento/verificar-suscripciones/', views.verificar_suscripciones, name='verificar_suscripciones'),
 
    # Usuarios (Nombres específicos y claros)
    path('usuarios/', views.listar_usuarios, name='listar_usuarios'),
@@ -49,5 +50,13 @@ urlpatterns = [
     
     # Rutas de autenticación
     path('login/', views.login_view, name='login'),
+    path('registro/', views.registro_view, name='registro'),
     path('logout/', views.logout_view, name='logout'),
+    
+    path('dashboard/usuario/', views.dashboard_usuario, name='dashboard_usuario'),
+    path('dashboard/usuario/pagar/', views.procesar_pago, name='procesar_pago'),
+    path('dashboard/artista/', views.dashboard_artista, name='dashboard_artista'),
+    
+    # TRIGGER DE REPRODUCCIONES
+    path('cancion/reproducir/<int:id_cancion>/', views.registrar_reproduccion, name='registrar_reproduccion'),
 ]

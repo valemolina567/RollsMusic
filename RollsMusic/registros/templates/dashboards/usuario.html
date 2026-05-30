@@ -1,0 +1,125 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mi Biblioteca - RollsMusic</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+    <style>
+        :root { --rm-bg: #111111; --rm-surface: #1E1E1E; --rm-accent: #00AEEF; --rm-text-primary: #FFFFFF; --rm-text-secondary: #CCCCCC; }
+        body { background-color: var(--rm-bg); color: var(--rm-text-primary); font-family: 'Segoe UI', sans-serif; padding-bottom: 50px; }
+        
+        /* Corrección de Alto Contraste */
+        .text-muted { color: var(--rm-text-secondary) !important; }
+        
+        .navbar-rm { background-color: var(--rm-surface); padding: 15px 30px; border-bottom: 1px solid #333; }
+        .logo-img-nav { max-height: 40px; width: auto; }
+
+        .plan-banner { background-color: var(--rm-surface); border-radius: 8px; border-left: 5px solid #555; padding: 25px; margin-bottom: 30px; }
+        .plan-banner.premium { border-left-color: var(--rm-accent); }
+        .plan-title { color: var(--rm-text-secondary); text-transform: uppercase; font-size: 0.8rem; font-weight: 700; letter-spacing: 1px; }
+
+        .section-title { font-size: 1.4rem; font-weight: 700; margin-bottom: 20px; border-bottom: 2px solid var(--rm-surface); padding-bottom: 10px; }
+        .track-list-container { background-color: var(--rm-surface); border-radius: 8px; padding: 10px; border: 1px solid #333; }
+        .track-item { padding: 15px; border-radius: 4px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #2a2a2a; transition: background-color 0.2s; }
+        .track-item:last-child { border-bottom: none; }
+        .track-item:hover { background-color: #252525; }
+        .track-info h6 { margin: 0; font-weight: 600; color: var(--rm-text-primary); }
+        .track-info small { color: var(--rm-text-secondary); font-size: 0.9rem; }
+        
+        .btn-play-track { color: var(--rm-accent); background-color: transparent; border: 2px solid var(--rm-accent); border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
+        .btn-play-track:hover { background-color: var(--rm-accent); color: #fff; transform: scale(1.1); }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-rm d-flex justify-content-between align-items-center">
+        <a href="#" class="text-decoration-none d-flex align-items-center gap-2">
+            <img src="{% static 'images/Logo.png' %}" alt="Icono RollsMusic" style="max-height: 45px; width: auto;">
+            <span class="fs-4 fw-bold text-white mb-0" style="letter-spacing: -0.5px;">RollsMusic</span>
+        </a>
+        <div class="d-flex align-items-center gap-3">
+            <span class="fw-bold">Hola, {{ request.session.usuario_nombre }}</span>
+            <a class="btn btn-outline-light btn-sm rounded-pill px-3" href="{% url 'logout' %}">Cerrar Sesión</a>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        {% if messages %}
+            {% for message in messages %}
+                <div class="alert alert-success bg-success text-white border-0 fw-bold mb-4" role="alert">
+                    <i class="bi bi-check-circle-fill me-2"></i> {{ message }}
+                </div>
+            {% endfor %}
+        {% endif %}
+
+        <div class="plan-banner {% if plan_info.plan_nombre == 'Premium' %}premium{% endif %} d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
+            <div>
+                <div class="plan-title">Tu Cuenta</div>
+                <h2 class="fw-bold mb-0">Plan {{ plan_info.plan_nombre }}</h2>
+                <p class="mb-0 text-muted fw-bold">Estado: {{ plan_info.suscripcion_estado }}</p>
+            </div>
+            <div>
+                {% if plan_info.plan_nombre == 'Free' or plan_info.suscripcion_estado != 'Activa' %}
+                    <a href="{% url 'procesar_pago' %}" class="btn btn-lg fw-bold px-4" style="background-color: var(--rm-accent); color: #fff;">
+                        Mejorar a Premium por $9.99
+                    </a>
+                {% else %}
+                    <span class="text-success fw-bold fs-5"><i class="bi bi-patch-check-fill fs-4 me-2"></i>Dolby Atmos </span>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-lg-7 mb-4">
+                <h3 class="section-title"><i class="bi bi-magic me-2" style="color: var(--rm-accent);"></i>Especialmente para ti</h3>
+                <div class="track-list-container">
+                    {% for rec in recomendaciones %}
+                    <div class="track-item hover-effect">
+                        <div class="d-flex align-items-center gap-3">
+                            <div class="p-2 border border-secondary rounded" style="background-color: #333;">
+                                <i class="bi bi-music-note fs-5 text-secondary"></i>
+                            </div>
+                            <div class="track-info">
+                                <h6>{{ rec.Cancion }}</h6>
+                                <small>{{ rec.Artista }}</small>
+                            </div>
+                        </div>
+                        <a href="{% url 'registrar_reproduccion' rec.idCancion %}" class="btn-play-track text-decoration-none" title="Escuchar esta canción">
+                            <i class="bi bi-play-fill fs-5"></i>
+                        </a>
+                    </div>
+                    {% empty %}
+                    <div class="text-center py-4 text-muted">
+                        Reproduce más música para recibir recomendaciones personalizadas.
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="col-lg-5 mb-4">
+                <h3 class="section-title"><i class="bi bi-graph-up-arrow me-2" style="color: var(--rm-accent);"></i>Lo que más escuchas</h3>
+                <div class="track-list-container">
+                    {% for cancion in top_canciones %}
+                    <div class="track-item">
+                        <div class="d-flex align-items-center gap-3">
+                            <div class="fw-bold fs-5 text-muted" style="width: 30px; text-align: right;">{{ forloop.counter }}</div>
+                            <div class="track-info">
+                                <h6>{{ cancion.Cancion }}</h6>
+                                <small>{{ cancion.Artista }} • {{ cancion.Album }}</small>
+                            </div>
+                        </div>
+                        <div class="text-muted fw-bold">{{ cancion.TotalReproducciones }}<small class="fw-normal"> rep.</small></div>
+                    </div>
+                    {% empty %}
+                    <div class="text-center py-4 text-muted">
+                        Aún no tienes reproducciones registradas.
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
