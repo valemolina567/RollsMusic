@@ -50,16 +50,36 @@
             
             <div class="bg-white p-5 rounded shadow-sm">
                 <h1 class="mb-4 text-secondary fw-bold">Panel de Administración - Rolls Music</h1>
-                <p class="text-muted">Selecciona el módulo que deseas gestionar hoy:</p>
+                <p class="text-muted">Selecciona el módulo que deseas gestionar hoy o ejecuta tareas de mantenimiento:</p>
                 
-                <div class="list-group col-md-6 mt-3">
-                    <a href="{% url 'listar_usuarios' %}" class="list-group-item list-group-item-action">🪪 Módulo de Usuarios</a>
-                    <a href="{% url 'listar_discograficas' %}" class="list-group-item list-group-item-action">🏢 Módulo de Discográficas</a>
-                    <a href="{% url 'listar_artistas' %}" class="list-group-item list-group-item-action">🎤 Módulo de Artistas</a>
-                    <a href="{% url 'listar_albumes' %}" class="list-group-item list-group-item-action">💿 Módulo de Álbumes</a>
-                    <a href="{% url 'listar_canciones' %}" class="list-group-item list-group-item-action">🎵 Módulo de Canciones</a>
-                    <a href="{% url 'listar_generos' %}" class="list-group-item list-group-item-action">🏷️ Módulo de Géneros</a>
-                    <a href="{% url 'listar_planes' %}" class="list-group-item list-group-item-action">💳 Módulo de Planes de Suscripción</a>
+                <div class="row mt-4">
+                    <div class="col-md-7 mb-4">
+                        <h5 class="fw-bold text-dark mb-3">Gestión de Catálogo y Usuarios</h5>
+                        <div class="list-group shadow-sm">
+                            <a href="{% url 'listar_usuarios' %}" class="list-group-item list-group-item-action">🪪 Módulo de Usuarios</a>
+                            <a href="{% url 'listar_discograficas' %}" class="list-group-item list-group-item-action">🏢 Módulo de Discográficas</a>
+                            <a href="{% url 'listar_artistas' %}" class="list-group-item list-group-item-action">🎤 Módulo de Artistas</a>
+                            <a href="{% url 'listar_albumes' %}" class="list-group-item list-group-item-action">💿 Módulo de Álbumes</a>
+                            <a href="{% url 'listar_canciones' %}" class="list-group-item list-group-item-action">🎵 Módulo de Canciones</a>
+                            <a href="{% url 'listar_generos' %}" class="list-group-item list-group-item-action">🏷️ Módulo de Géneros</a>
+                            <a href="{% url 'listar_planes' %}" class="list-group-item list-group-item-action">💳 Módulo de Planes de Suscripción</a>
+                        </div>
+                    </div>
+
+                    <div class="col-md-5">
+                        <h5 class="fw-bold text-dark mb-3">Acciones de Sistema</h5>
+                        <div class="card border-0 shadow-sm bg-light">
+                            <div class="card-header bg-warning text-dark fw-bold border-0">
+                                ⚙️ Mantenimiento Automatizado
+                            </div>
+                            <div class="card-body">
+                                <p class="card-text text-muted small">Al ejecutar esta acción, el sistema llamará al cursor de la base de datos para recorrer todas las suscripciones activas y cambiará a estado "Vencida" aquellas cuya fecha límite haya expirado.</p>
+                                <a href="{% url 'verificar_suscripciones' %}" class="btn btn-dark fw-bold w-100 shadow-sm" onclick="return confirm('¿Estás seguro de ejecutar el mantenimiento de suscripciones ahora?');">
+                                    Ejecutar Cursor de Vencimientos
+                                </a>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 

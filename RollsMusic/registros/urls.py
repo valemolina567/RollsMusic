@@ -4,6 +4,7 @@ from . import views
 urlpatterns = [
     # Panel Principal
     path('', views.index, name='index'),
+    path('mantenimiento/verificar-suscripciones/', views.verificar_suscripciones, name='verificar_suscripciones'),
 
    # Usuarios (Nombres específicos y claros)
    path('usuarios/', views.listar_usuarios, name='listar_usuarios'),

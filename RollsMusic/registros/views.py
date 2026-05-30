@@ -556,6 +556,23 @@ def procesar_pago(request):
         
     return render(request, 'dashboards/facturacion.html')
 
+def verificar_suscripciones(request):
+    # Verificación de seguridad: Solo el Admin puede ejecutar esto
+    if 'usuario_id' not in request.session or request.session.get('usuario_rol') != 'Admin':
+        messages.error(request, "Acceso denegado. Esta acción es exclusiva para administradores.")
+        return redirect('login')
+        
+    try:
+        with connection.cursor() as cursor:
+            # Consumo del Procedimiento Almacenado que contiene el Cursor
+            cursor.execute("EXEC Facturacion.sp_VerificarSuscripcionesVencidas")
+            
+        messages.success(request, "⚙️ Mantenimiento completado: El cursor ha verificado y actualizado las suscripciones vencidas exitosamente.")
+    except Exception as e:
+        messages.error(request, f"Error al ejecutar el cursor de mantenimiento: {str(e)}")
+        
+    return redirect('index')
+
 
 def logout_view(request):
     # Limpiamos por completo la sesión del navegador
