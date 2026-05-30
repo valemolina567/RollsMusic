@@ -22,6 +22,44 @@
         </div>
     </nav>
 
+    <div class="container mt-4">
+        {% if messages %}
+            {% for message in messages %}
+                <div class="alert alert-success alert-dismissible fade show shadow-sm" role="alert">
+                    <i class="bi bi-check-circle-fill me-2"></i> {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            {% endfor %}
+        {% endif %}
+
+        <div class="card border-0 shadow-sm p-4 mb-4 bg-white rounded-3 d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-3">
+            <div>
+                <h5 class="text-muted text-uppercase small mb-1 fw-bold tracking-wider">Estado de tu Cuenta</h5>
+                <div class="d-flex align-items-center gap-2">
+                    <h3 class="fw-bold mb-0 text-dark">Plan {{ plan_info.plan_nombre }}</h3>
+                    {% if plan_info.plan_nombre == 'Premium' and plan_info.suscripcion_estado == 'Activa' %}
+                        <span class="badge bg-warning text-dark fw-bold rounded-pill"><i class="bi bi-gem"></i> PRO</span>
+                    {% else %}
+                        <span class="badge bg-secondary rounded-pill">Gratuito</span>
+                    {% endif %}
+                </div>
+                <p class="text-muted small mb-0 mt-1">Estado de suscripción: <strong>{{ plan_info.suscripcion_estado }}</strong></p>
+            </div>
+            
+            <div>
+                {% if plan_info.plan_nombre == 'Free' or plan_info.suscripcion_estado != 'Activa' %}
+                    <a href="{% url 'procesar_pago' %}" class="btn btn-warning btn-lg fw-bold text-dark px-4 shadow-sm">
+                        <i class="bi bi-lightning-charge-fill text-dark"></i> Mejorar a Premium por $9.99
+                    </a>
+                {% else %}
+                    <span class="text-success fw-bold d-flex align-items-center gap-1">
+                        <i class="bi bi-patch-check-fill fs-4"></i> Tienes acceso a audio de Alta Calidad ilimitado
+                    </span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
     <div class="container my-5">
         <h2 class="fw-bold mb-4">Descubre y Escucha 🎶</h2>
         

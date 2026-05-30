@@ -436,19 +436,38 @@ def dashboard_usuario(request):
     top_canciones = []
     recomendaciones = []
     
-    # IMPLEMENTACIÓN DE PROCEDIMIENTOS ALMACENADOS
+    # Valores por defecto si no tiene registro de suscripción aún
+    plan_info = {'plan_nombre': 'Free', 'suscripcion_estado': 'Inactiva', 'idSuscripcion': None}
+    
     with connection.cursor() as cursor:
-        # 1. Ejecutar Reporte: Top Canciones por Usuario
+        # 1. Consulta SQL para obtener el plan y estado de suscripción del usuario
+        cursor.execute("""
+            SELECT TOP 1 P.nombre, S.estado, S.idSuscripcion
+            FROM Facturacion.Suscripcion S
+            INNER JOIN Facturacion.PlanEntity P ON S.PlanEntity_idPlan = P.idPlan
+            WHERE S.Usuario_idUsuario = %s
+            ORDER BY CASE WHEN S.estado = 'Activa' THEN 1 ELSE 2 END, S.idSuscripcion DESC
+        """, [usuario_id])
+        row = cursor.fetchone()
+        if row:
+            plan_info = {
+                'plan_nombre': row[0],
+                'suscripcion_estado': row[1],
+                'idSuscripcion': row[2]
+            }
+
+        # 2. Ejecutar Reporte: Top Canciones por Usuario
         cursor.execute("EXEC Reportes.sp_TopCancionesUsuario @idUsuario = %s", [usuario_id])
         top_canciones = dictfetchall(cursor)
         
-        # 2. Ejecutar Reporte: Recomendaciones Personalizadas
+        # 3. Ejecutar Reporte: Recomendaciones Personalizadas
         cursor.execute("EXEC Reportes.sp_RecomendacionesPersonalizadas @idUsuario = %s", [usuario_id])
         recomendaciones = dictfetchall(cursor)
         
     context = {
         'top_canciones': top_canciones,
-        'recomendaciones': recomendaciones,
+        'recomendaciones': recommendations if 'recommendations' in locals() else recomendaciones,
+        'plan_info': plan_info,
     }
     return render(request, 'dashboards/usuario.html', context)
 
@@ -493,6 +512,49 @@ def dashboard_artista(request):
         'minutos_cancion_demo': minutos_cancion_demo,
     }
     return render(request, 'dashboards/artista.html', context)
+
+def procesar_pago(request):
+    if 'usuario_id' not in request.session:
+        return redirect('login')
+        
+    usuario_id = request.session['usuario_id']
+    
+    if request.method == 'POST':
+        metodo = request.POST.get('metodo') # 'PayPal', 'Tarjeta' o 'Transferencia'
+        monto = 9.99  # Precio establecido para el plan Premium
+        
+        with connection.cursor() as cursor:
+            # 1. Validar si el usuario ya cuenta con un registro de suscripción Premium (Plan 2)
+            cursor.execute("""
+                SELECT idSuscripcion FROM Facturacion.Suscripcion 
+                WHERE Usuario_idUsuario = %s AND PlanEntity_idPlan = 2
+            """, [usuario_id])
+            row = cursor.fetchone()
+            
+            if row:
+                id_suscripcion = row[0]
+                cursor.execute("UPDATE Facturacion.Suscripcion SET estado = 'Activa' WHERE idSuscripcion = %s", [id_suscripcion])
+            else:
+                # Crear una nueva suscripción Premium activa por 30 días
+                cursor.execute("""
+                    INSERT INTO Facturacion.Suscripcion (fechaInicio, fechaFin, estado, Usuario_idUsuario, PlanEntity_idPlan)
+                    VALUES (GETDATE(), DATEADD(day, 30, GETDATE()), 'Activa', %s, 2)
+                """, [usuario_id])
+                cursor.execute("SELECT @@IDENTITY")
+                id_suscripcion = cursor.fetchone()[0]
+            
+            # 2. CONSUMO DE OBJETO PROGRAMABLE: Registrar el Pago ejecutando el SP
+            cursor.execute("""
+                EXEC Facturacion.sp_RegistrarPago 
+                    @monto = %s, 
+                    @metodo = %s, 
+                    @idSuscripcion = %s
+            """, [monto, metodo, id_suscripcion])
+            
+        messages.success(request, "¡Transacción completada! Tu cuenta ha sido actualizada a Premium ✨")
+        return redirect('dashboard_usuario')
+        
+    return render(request, 'dashboards/facturacion.html')
 
 
 def logout_view(request):

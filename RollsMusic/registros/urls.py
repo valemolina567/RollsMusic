@@ -53,5 +53,6 @@ urlpatterns = [
     path('logout/', views.logout_view, name='logout'),
     
     path('dashboard/usuario/', views.dashboard_usuario, name='dashboard_usuario'),
+    path('dashboard/usuario/pagar/', views.procesar_pago, name='procesar_pago'),
     path('dashboard/artista/', views.dashboard_artista, name='dashboard_artista'),
 ]

@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Pasarela de Pago - RollsMusic</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+    <style>
+        body { background-color: #f8f9fa; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+        .checkout-card { max-width: 480px; width: 100%; border: none; border-radius: 16px; box-shadow: 0 15px 35px rgba(0,0,0,0.05); }
+    </style>
+</head>
+<body>
+
+    <div class="card checkout-card p-4 bg-white">
+        <div class="text-center mb-4">
+            <div class="text-warning display-4 mb-2"><i class="bi bi-credit-card-2-back-fill"></i></div>
+            <h3 class="fw-bold mb-1">Pasarela de Pago</h3>
+            <p class="text-muted">Estás adquiriendo el plan <strong>RollsMusic Premium</strong></p>
+        </div>
+
+        <div class="bg-light p-3 rounded-3 mb-4 text-center">
+            <span class="text-muted small">Total a pagar:</span>
+            <h2 class="fw-bold text-dark mb-0">$9.99 <span class="fs-6 text-muted fw-normal">/ mes</span></h2>
+        </div>
+
+        <form action="{% url 'procesar_pago' %}" method="POST">
+            {% csrf_token %}
+            
+            <label class="form-label fw-bold mb-3">Selecciona tu método de pago:</label>
+            
+            <div class="form-check p-3 border rounded-3 mb-2 d-flex align-items-center gap-3">
+                <input class="form-check-input ms-0" type="radio" name="metodo" id="tarjeta" value="Tarjeta" checked required>
+                <label class="form-check-label w-100 fw-semibold" for="tarjeta">
+                    <i class="bi bi-credit-card me-2 text-primary"></i> Tarjeta de Crédito / Débito
+                </label>
+            </div>
+
+            <div class="form-check p-3 border rounded-3 mb-2 d-flex align-items-center gap-3">
+                <input class="form-check-input ms-0" type="radio" name="metodo" id="paypal" value="PayPal" required>
+                <label class="form-check-label w-100 fw-semibold" for="paypal">
+                    <i class="bi bi-paypal me-2 text-info"></i> Cuenta de PayPal
+                </label>
+            </div>
+
+            <div class="form-check p-3 border rounded-3 mb-4 d-flex align-items-center gap-3">
+                <input class="form-check-input ms-0" type="radio" name="metodo" id="transferencia" value="Transferencia" required>
+                <label class="form-check-label w-100 fw-semibold" for="transferencia">
+                    <i class="bi bi-bank me-2 text-success"></i> Transferencia Bancaria Directa
+                </label>
+            </div>
+
+            <div class="d-grid gap-2">
+                <button type="submit" class="btn btn-primary btn-lg fw-bold rounded-3 py-2">Confirmar y Pagar Pago</button>
+                <a href="{% url 'dashboard_usuario' %}" class="btn btn-link text-muted text-decoration-none text-center small mt-1">Cancelar Transacción</a>
+            </div>
+        </form>
+    </div>
+
+</body>
+</html>
