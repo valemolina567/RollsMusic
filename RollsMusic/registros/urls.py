@@ -50,4 +50,7 @@ urlpatterns = [
     # Rutas de autenticación
     path('login/', views.login_view, name='login'),
     path('logout/', views.logout_view, name='logout'),
+    
+    path('dashboard/usuario/', views.dashboard_usuario, name='dashboard_usuario'),
+    path('dashboard/artista/', views.dashboard_artista, name='dashboard_artista'),
 ]
