@@ -367,6 +367,58 @@ def login_view(request):
 
     return render(request, 'auth/login.html')
 
+def registro_view(request):
+    if request.method == 'POST':
+        # 1. Capturar los datos enviados por el usuario
+        nombre = request.POST.get('nombre', '').strip()
+        apellido = request.POST.get('apellido', '').strip()
+        correo = request.POST.get('correo', '').strip()
+        contrasenia = request.POST.get('contrasenia', '').strip()
+        fecha_nacimiento = request.POST.get('fecha_nacimiento', '').strip()
+        
+        # Validar que no existan campos vacíos
+        if not all([nombre, apellido, correo, contrasenia, fecha_nacimiento]):
+            messages.error(request, "Por favor, completa todos los campos obligatorios.")
+            return render(request, 'auth/registro.html')
+
+        # Asignamos una imagen por defecto, ya que es obligatoria en la base de datos
+        imagen_default = 'usuario_nuevo.png'
+        # El rol por defecto será 2 (Cliente)
+        rol_cliente = 2 
+
+        # 2. Ejecutar el Procedimiento Almacenado
+        with connection.cursor() as cursor:
+            try:
+                cursor.execute("""
+                    EXEC Usuarios.sp_RegistrarUsuario 
+                        @nombre = %s,
+                        @apellido = %s,
+                        @correo = %s,
+                        @contrasenia = %s,
+                        @imagen = %s,
+                        @fechaNacimiento = %s,
+                        @Rol_idRol = %s
+                """, [nombre, apellido, correo, contrasenia, imagen_default, fecha_nacimiento, rol_cliente])
+                
+                # El SP retorna: SELECT 1 AS Estado, 'Mensaje' AS Mensaje
+                resultado = cursor.fetchone()
+                
+                if resultado and resultado[0] == 1:
+                    # Registro exitoso
+                    messages.success(request, "¡Cuenta creada con éxito! Ahora puedes iniciar sesión.")
+                    return redirect('login')
+                else:
+                    # Error controlado desde el SP (ej. correo duplicado)
+                    error_msg = resultado[1] if resultado else "Error desconocido al registrar."
+                    messages.error(request, f"Error: {error_msg}")
+                    
+            except Exception as e:
+                # Error de ejecución o conexión
+                messages.error(request, f"Ocurrió un error en el servidor: {str(e)}")
+
+    # Si es método GET, solo mostramos el formulario vacío
+    return render(request, 'auth/registro.html')
+
 # ==========================================
 # DASHBOARDS E INTEGRACIÓN DE OBJETOS SQL
 # ==========================================

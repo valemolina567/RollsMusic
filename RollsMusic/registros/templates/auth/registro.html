@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Crear Cuenta - RollsMusic</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+    <style>
+        body { background-color: #f4f6f9; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+        .register-card { max-width: 500px; width: 100%; border-radius: 15px; border: none; box-shadow: 0 10px 30px rgba(0,0,0,0.1); overflow: hidden; }
+        .bg-brand { background-color: #1e1e1e; color: white; }
+    </style>
+</head>
+<body>
+
+    <div class="card register-card">
+        <div class="card-header bg-brand text-center py-4">
+            <h3 class="fw-bold mb-0">🎵 Únete a RollsMusic</h3>
+            <p class="text-muted mb-0">Crea tu cuenta gratuita</p>
+        </div>
+        <div class="card-body p-4">
+            
+            {% if messages %}
+                {% for message in messages %}
+                    <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+
+            <form action="{% url 'registro' %}" method="POST">
+                {% csrf_token %}
+                
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="nombre" class="form-label fw-bold">Nombre</label>
+                        <input type="text" class="form-control" id="nombre" name="nombre" placeholder="Ej. Carlos" required>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label for="apellido" class="form-label fw-bold">Apellido</label>
+                        <input type="text" class="form-control" id="apellido" name="apellido" placeholder="Ej. López" required>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label for="fecha_nacimiento" class="form-label fw-bold">Fecha de Nacimiento</label>
+                    <input type="date" class="form-control" id="fecha_nacimiento" name="fecha_nacimiento" required>
+                </div>
+
+                <div class="mb-3">
+                    <label for="correo" class="form-label fw-bold">Correo Electrónico</label>
+                    <input type="email" class="form-control" id="correo" name="correo" placeholder="correo@ejemplo.com" required>
+                </div>
+
+                <div class="mb-4">
+                    <label for="contrasenia" class="form-label fw-bold">Contraseña</label>
+                    <input type="password" class="form-control" id="contrasenia" name="contrasenia" placeholder="Crea una contraseña segura" required>
+                </div>
+
+                <div class="d-grid">
+                    <button type="submit" class="btn btn-success btn-lg fw-bold">Regístrate Ahora <i class="bi bi-arrow-right-circle"></i></button>
+                </div>
+            </form>
+        </div>
+        <div class="card-footer text-center py-3 bg-light">
+            <span>¿Ya tienes una cuenta? <a href="{% url 'login' %}" class="text-primary fw-bold text-decoration-none">Inicia Sesión aquí</a></span>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
