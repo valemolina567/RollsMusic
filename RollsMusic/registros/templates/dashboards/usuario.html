@@ -102,7 +102,9 @@
                                     <h6 class="mb-0 fw-bold">{{ rec.Cancion }}</h6>
                                     <small class="text-muted">{{ rec.Artista }}</small>
                                 </div>
-                                <button class="btn btn-sm btn-outline-primary rounded-pill"><i class="bi bi-play-fill"></i> Play</button>
+                                <a href="{% url 'registrar_reproduccion' rec.idCancion %}" class="btn btn-sm btn-primary rounded-pill px-3 shadow-sm">
+                                    <i class="bi bi-play-fill"></i> Escuchar
+                                </a>
                             </li>
                             {% empty %}
                             <li class="list-group-item p-4 text-muted text-center">
