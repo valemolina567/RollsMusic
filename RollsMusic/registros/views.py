@@ -651,10 +651,12 @@ def registrar_reproduccion(request, id_cancion):
             duracion_segundos = cancion[0]
             titulo_cancion = cancion[1]
 
-            # 2. Inserción directa. Esto disparará automáticamente el TRIGGER de la BD
+            # 2. Inserción con los nombres de la tabla en SQL Server
             cursor.execute("""
-                INSERT INTO Usuarios.Reproduccion (fecha, duracion, Usuario_idUsuario, Cancion_idCancion)
-                VALUES (GETDATE(), %s, %s, %s)
+                INSERT INTO Usuarios.Reproduccion 
+                (fechaHora, dispositivo, pais, duracionEscuchada, completada, Usuario_idUsuario, Cancion_idCancion)
+                VALUES 
+                (GETDATE(), 'Navegador Web', 'Ecuador', %s, 1, %s, %s)
             """, [duracion_segundos, usuario_id, id_cancion])
             
             messages.success(request, f"▶️ Reproduciendo ahora: '{titulo_cancion}'. ¡Historial y métricas actualizados!")
