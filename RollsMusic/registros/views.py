@@ -5,6 +5,7 @@ from datetime import date
 from .models import Usuario, Discografica, Artista, Album, Cancion, Genero, PlanEntity, Rol
 from django.db import connection
 from django.db import DatabaseError
+from functools import wraps
 
 def verificar_rol(roles_permitidos):
     """Decorador para restringir el acceso a vistas según el rol de la sesión."""
