@@ -3,6 +3,7 @@ from django.contrib import messages
 from datetime import date
 # Se añade 'Rol' a las importaciones
 from .models import Usuario, Discografica, Artista, Album, Cancion, Genero, PlanEntity, Rol
+from django.db import connection
 
 def listar_usuarios(request):
     # Si no existe la variable en sesión, lo mandamos directo al login
@@ -340,28 +341,106 @@ def login_view(request):
             return render(request, 'auth/login.html')
 
         try:
-            # Buscamos al usuario por su correo exacto
             usuario = Usuario.objects.get(correo=correo)
             
-            # Verificamos si la contraseña coincide
             if usuario.contrasenia == contrasenia:
                 if usuario.estado != 'Activo':
                     messages.error(request, f"Tu cuenta se encuentra: {usuario.estado}. Contacta al administrador.")
                     return render(request, 'auth/login.html')
                 
-                # --- GUARDAR EN SESIÓN MANUAL DE DJANGO ---
+                # Variables de sesión
                 request.session['usuario_id'] = usuario.idUsuario
                 request.session['usuario_nombre'] = f"{usuario.nombre} {usuario.apellido}"
-                request.session['usuario_rol'] = usuario.Rol_idRol.nombre  # Guardamos 'Admin', 'Cliente', etc.
+                request.session['usuario_rol'] = usuario.Rol_idRol.nombre
                 
-                messages.success(request, f"¡Bienvenido de nuevo, {usuario.nombre}!")
-                return redirect('index')  # Redirige al panel principal
+                # REDIRECCIÓN DINÁMICA POR ROL
+                if usuario.Rol_idRol.nombre == 'Admin':
+                    return redirect('index')
+                elif usuario.Rol_idRol.nombre == 'Artista':
+                    return redirect('dashboard_artista')
+                else:
+                    return redirect('dashboard_usuario')
             else:
                 messages.error(request, "Contraseña incorrecta.")
         except Usuario.DoesNotExist:
             messages.error(request, "El correo electrónico no está registrado.")
 
     return render(request, 'auth/login.html')
+
+# ==========================================
+# DASHBOARDS E INTEGRACIÓN DE OBJETOS SQL
+# ==========================================
+
+def dictfetchall(cursor):
+    """Devuelve todas las filas de un cursor como un diccionario (clave-valor)."""
+    columns = [col[0] for col in cursor.description]
+    return [dict(zip(columns, row)) for row in cursor.fetchall()]
+
+def dashboard_usuario(request):
+    if 'usuario_id' not in request.session or request.session.get('usuario_rol') not in ['Cliente', 'Admin']:
+        return redirect('login')
+        
+    usuario_id = request.session['usuario_id']
+    top_canciones = []
+    recomendaciones = []
+    
+    # IMPLEMENTACIÓN DE PROCEDIMIENTOS ALMACENADOS
+    with connection.cursor() as cursor:
+        # 1. Ejecutar Reporte: Top Canciones por Usuario
+        cursor.execute("EXEC Reportes.sp_TopCancionesUsuario @idUsuario = %s", [usuario_id])
+        top_canciones = dictfetchall(cursor)
+        
+        # 2. Ejecutar Reporte: Recomendaciones Personalizadas
+        cursor.execute("EXEC Reportes.sp_RecomendacionesPersonalizadas @idUsuario = %s", [usuario_id])
+        recomendaciones = dictfetchall(cursor)
+        
+    context = {
+        'top_canciones': top_canciones,
+        'recomendaciones': recomendaciones,
+    }
+    return render(request, 'dashboards/usuario.html', context)
+
+
+def dashboard_artista(request):
+    if 'usuario_id' not in request.session or request.session.get('usuario_rol') not in ['Artista', 'Admin']:
+        return redirect('login')
+    
+    usuario_nombre = request.session.get('usuario_nombre').split()[0]
+    
+    # NOTA TÉCNICA: Como en su BD no hay una FK directa de Usuario -> Artista para saber 
+    # qué perfil le pertenece, buscaremos una coincidencia por nombre o cargaremos el primer artista a modo de Demo.
+    artista = Artista.objects.filter(nombreArtistico__icontains=usuario_nombre).first()
+    if not artista:
+        artista = Artista.objects.first()
+
+    total_regalias = 0
+    minutos_cancion_demo = 0
+    canciones_artista = []
+
+    if artista:
+        canciones_artista = Cancion.objects.filter(Album_idAlbum__Artista_idArtista=artista.idArtista)
+        cancion_demo_id = canciones_artista.first().idCancion if canciones_artista.exists() else None
+
+        # IMPLEMENTACIÓN DE FUNCIONES ESCALARES
+        with connection.cursor() as cursor:
+            # 1. Función Escalar: Total de regalías generadas por el artista
+            cursor.execute("SELECT Facturacion.fn_TotalRegaliaArtista(%s)", [artista.idArtista])
+            row = cursor.fetchone()
+            total_regalias = row[0] if row and row[0] else 0
+            
+            # 2. Función Escalar: Minutos Reproducidos (usando la pista principal del artista)
+            if cancion_demo_id:
+                cursor.execute("SELECT Usuarios.fn_MinutosReproduccionCancion(%s)", [cancion_demo_id])
+                row2 = cursor.fetchone()
+                minutos_cancion_demo = row2[0] if row2 and row2[0] else 0
+
+    context = {
+        'artista': artista,
+        'total_regalias': total_regalias,
+        'canciones_artista': canciones_artista,
+        'minutos_cancion_demo': minutos_cancion_demo,
+    }
+    return render(request, 'dashboards/artista.html', context)
 
 
 def logout_view(request):
