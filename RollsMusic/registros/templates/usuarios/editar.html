@@ -1,30 +1,103 @@
-<h1>Editar Usuario: {{ usuario.nombre }} {{ usuario.apellido }}</h1>
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Editar Usuario - RollsMusic</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+    <style>
+        :root { --rm-bg: #111111; --rm-surface: #1E1E1E; --rm-accent: #00AEEF; --rm-text-primary: #FFFFFF; --rm-text-secondary: #CCCCCC; }
+        body { background-color: var(--rm-bg); color: var(--rm-text-primary); font-family: 'Segoe UI', sans-serif; padding-bottom: 50px; }
+        .navbar-rm { background-color: var(--rm-surface); padding: 15px 30px; border-bottom: 1px solid #333; }
+        .admin-card { background-color: var(--rm-surface); border-radius: 8px; border: 1px solid #333; padding: 30px; margin-top: 20px; }
+        
+        /* Se añadió .form-select aquí para mantener el diseño oscuro */
+        .form-control, .form-select { background-color: #252525; border: 1px solid #444; color: #fff; }
+        .form-control:focus, .form-select:focus { background-color: #2a2a2a; border-color: var(--rm-accent); color: #fff; box-shadow: 0 0 0 0.25px rgba(0, 174, 239, 0.25); }
+        .form-label { color: var(--rm-text-secondary); font-weight: 600; font-size: 0.9rem; }
+        
+        .btn-volver { color: #E0E0E0; font-weight: 600; transition: color 0.2s; }
+        .btn-volver:hover { color: var(--rm-accent); }
 
-{% if messages %}
-    <ul>
-        {% for message in messages %}
-            <li style="color:red">{{ message }}</li>
-        {% endfor %}
-    </ul>
-{% endif %}
+        .btn-rm-accent { background-color: var(--rm-accent); color: #000; font-weight: 700; border: none; }
+        .btn-rm-accent:hover { background-color: #009cd4; color: #000; }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-rm d-flex justify-content-between align-items-center">
+        <a href="{% url 'index' %}" class="text-decoration-none d-flex align-items-center gap-2">
+            <img src="{% static 'images/Logo.png' %}" alt="Icono RollsMusic" style="max-height: 45px; width: auto;">
+            <span class="fs-4 fw-bold text-white mb-0">RollsMusic</span>
+        </a>
+    </nav>
 
-<a href="{% url 'listar_usuarios' %}">⬅️ Cancelar y volver</a>
-<br><br>
+    <div class="container mt-5" style="max-width: 650px;">
+        <a href="{% url 'listar_usuarios' %}" class="text-decoration-none btn-volver d-inline-flex align-items-center mb-3">
+            <i class="bi bi-arrow-left-short fs-4 text-info"></i> Cancelar y volver
+        </a>
+        
+        <div class="admin-card">
+            <div class="d-flex align-items-center mb-4">
+                <i class="bi bi-pencil-square fs-2 me-3 text-info"></i>
+                <div>
+                    <h3 class="fw-bold mb-0 text-white">Editar Usuario</h3>
+                    <p class="fw-semibold mb-0" style="font-size: 0.85rem; color: var(--rm-text-secondary);">Actualizando perfil de: <span class="text-info">{{ usuario.nombre }} {{ usuario.apellido }}</span></p>
+                </div>
+            </div>
 
-<form method="POST">
-    {% csrf_token %}
-    
-    <label for="nombre">Nombre:</label><br>
-    <input type="text" id="nombre" name="nombre" value="{{ usuario.nombre }}" required><br><br>
-    
-    <label for="apellido">Apellido:</label><br>
-    <input type="text" id="apellido" name="apellido" value="{{ usuario.apellido }}" required><br><br>
-    
-    <label for="correo">Correo Electrónico:</label><br>
-    <input type="email" id="correo" name="correo" value="{{ usuario.correo }}" required><br><br>
-    
-    <label for="estado">Estado de la cuenta:</label><br>
-    <input type="text" id="estado" name="estado" value="{{ usuario.estado }}" required><br><br>
-    
-    <button type="submit">💾 Actualizar</button>
-</form>
+            {% if messages %}
+                <div class="alert alert-danger bg-danger bg-opacity-10 border-danger text-danger py-2 px-3 mb-4 rounded" role="alert">
+                    <ul class="mb-0 ps-3">
+                        {% for message in messages %}
+                            <li><strong>Error:</strong> {{ message }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            {% endif %}
+
+            <form method="POST">
+                {% csrf_token %}
+                
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label for="nombre" class="form-label">Nombre</label>
+                        <input type="text" id="nombre" name="nombre" class="form-control" value="{{ usuario.nombre }}" required>
+                    </div>
+                    <div class="col-md-6">
+                        <label for="apellido" class="form-label">Apellido</label>
+                        <input type="text" id="apellido" name="apellido" class="form-control" value="{{ usuario.apellido }}" required>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label for="correo" class="form-label">Correo Electrónico</label>
+                    <input type="email" id="correo" name="correo" class="form-control" value="{{ usuario.correo }}" required>
+                </div>
+
+                <div class="row mb-4">
+                    <div class="col-md-6">
+                        <label for="estado" class="form-label">Estado de la cuenta</label>
+                        <input type="text" id="estado" name="estado" class="form-control" value="{{ usuario.estado }}" placeholder="Ej: Activo, Suspendido..." required>
+                    </div>
+                    <div class="col-md-6">
+                        <label for="rol" class="form-label">Rol del Usuario</label>
+                        <select name="rol" id="rol" class="form-select">
+                            {% for rol in roles %}
+                            <option value="{{ rol.idRol }}" {% if rol.idRol == usuario.Rol_idRol %}selected{% endif %}>
+                                {{ rol.nombre }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn btn-rm-accent w-100 py-2.5 rounded text-uppercase tracking-wider">
+                    <i class="bi bi-hdd-fill me-2"></i> Actualizar Cuenta
+                </button>
+            </form>
+        </div>
+    </div>
+</body>
+</html>

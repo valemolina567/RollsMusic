@@ -1,15 +1,86 @@
-<h1>Crear Álbum</h1>
-<a href="{% url 'listar_albumes' %}">⬅️ Cancelar y volver</a>
-<br><br>
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crear Álbum - RollsMusic</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+    <style>
+        :root { --rm-bg: #111111; --rm-surface: #1E1E1E; --rm-accent: #00AEEF; --rm-text-primary: #FFFFFF; --rm-text-secondary: #CCCCCC; }
+        body { background-color: var(--rm-bg); color: var(--rm-text-primary); font-family: 'Segoe UI', sans-serif; }
+        .navbar-rm { background-color: var(--rm-surface); padding: 15px 30px; border-bottom: 1px solid #333; }
+        .admin-card { background-color: var(--rm-surface); border-radius: 8px; border: 1px solid #333; padding: 30px; margin-top: 20px; }
+        
+        /* Estilos oscuros para los formularios */
+        .form-control, .form-select { background-color: #252525; border: 1px solid #444; color: #fff; }
+        .form-control:focus, .form-select:focus { background-color: #2a2a2a; border-color: var(--rm-accent); color: #fff; box-shadow: 0 0 0 0.25px rgba(0, 174, 239, 0.25); }
+        .form-label { color: var(--rm-text-secondary); font-weight: 600; font-size: 0.9rem; }
+        
+        /* SOLUCIÓN AL CALENDARIO NEGRO: Invierte el color del ícono nativo del navegador a blanco */
+        input[type="date"]::-webkit-calendar-picker-indicator {
+            filter: invert(1);
+            cursor: pointer;
+        }
 
-<form method="POST">
-    {% csrf_token %}
-    <input type="text" name="titulo" placeholder="Título del álbum" required><br>
-    <input type="date" name="fechaLanzamiento" required><br>
-    <select name="artista" required>
-        {% for a in artistas %} 
-            <option value="{{ a.idArtista }}">{{ a.nombreArtistico }}</option> 
-        {% endfor %}
-    </select><br><br>
-    <button type="submit">Guardar</button>
-</form>
+        /* Enlace volver estilizado con mejor visibilidad */
+        .btn-volver { color: #E0E0E0; font-weight: 600; transition: color 0.2s; }
+        .btn-volver:hover { color: var(--rm-accent); }
+
+        .btn-rm-accent { background-color: var(--rm-accent); color: #000; font-weight: 700; border: none; }
+        .btn-rm-accent:hover { background-color: #009cd4; color: #000; }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-rm d-flex justify-content-between align-items-center">
+        <a href="{% url 'index' %}" class="text-decoration-none d-flex align-items-center gap-2">
+            <img src="{% static 'images/Logo.png' %}" alt="Icono RollsMusic" style="max-height: 45px; width: auto;">
+            <span class="fs-4 fw-bold text-white mb-0">RollsMusic</span>
+        </a>
+    </nav>
+
+    <div class="container mt-5" style="max-width: 600px;">
+        <a href="{% url 'listar_albumes' %}" class="text-decoration-none btn-volver d-inline-flex align-items-center mb-3">
+            <i class="bi bi-arrow-left-short fs-4 text-info"></i> Cancelar y volver
+        </a>
+        
+        <div class="admin-card">
+            <div class="d-flex align-items-center mb-4">
+                <i class="bi bi-plus-circle-fill fs-2 me-3 text-info"></i>
+                <div>
+                    <h3 class="fw-bold mb-0 text-white">Crear Álbum</h3>
+                    <p class="fw-semibold mb-0" style="font-size: 0.85rem; color: var(--rm-text-secondary);">Completa los datos para el nuevo lanzamiento.</p>
+                </div>
+            </div>
+
+            <form method="POST">
+                {% csrf_token %}
+                <div class="mb-3">
+                    <label class="form-label">Título del Álbum</label>
+                    <input type="text" name="titulo" class="form-control form-control-lg" placeholder="Ej: Hybrid Theory" required>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Fecha de Lanzamiento</label>
+                    <input type="date" name="fechaLanzamiento" class="form-control" required>
+                </div>
+
+                <div class="mb-4">
+                    <label class="form-label">Artista / Banda</label>
+                    <select name="artista" class="form-select" required>
+                        <option value="" disabled selected>Selecciona un artista...</option>
+                        {% for a in artistas %} 
+                            <option value="{{ a.idArtista }}">{{ a.nombreArtistico }}</option> 
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <button type="submit" class="btn btn-rm-accent w-100 py-2.5 rounded text-uppercase tracking-wider">
+                    <i class="bi bi-disk me-2"></i> Guardar Álbum
+                </button>
+            </form>
+        </div>
+    </div>
+</body>
+</html>

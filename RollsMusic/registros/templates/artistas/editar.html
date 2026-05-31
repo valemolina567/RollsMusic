@@ -1,44 +1,102 @@
-<h1>Editar Artista</h1>
-<a href="{% url 'listar_artistas' %}">⬅️ Cancelar y volver</a>
-<br><br>
-<form method="POST">
-    {% csrf_token %}
-    
-    <div class="form-group">
-        <label>Usuario Asociado:</label>
-        <input type="text" class="form-control" value="{{ item.Usuario_idUsuario.nombre }} {{ item.Usuario_idUsuario.apellido }}" readonly>
-    </div>
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Editar Artista - RollsMusic</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+    <style>
+        :root { --rm-bg: #111111; --rm-surface: #1E1E1E; --rm-accent: #00AEEF; --rm-text-primary: #FFFFFF; --rm-text-secondary: #CCCCCC; }
+        body { background-color: var(--rm-bg); color: var(--rm-text-primary); font-family: 'Segoe UI', sans-serif; padding-bottom: 50px; }
+        .navbar-rm { background-color: var(--rm-surface); padding: 15px 30px; border-bottom: 1px solid #333; }
+        .admin-card { background-color: var(--rm-surface); border-radius: 8px; border: 1px solid #333; padding: 30px; margin-top: 20px; }
+        
+        .form-control, .form-select { background-color: #252525; border: 1px solid #444; color: #fff; }
+        .form-control:focus, .form-select:focus { background-color: #2a2a2a; border-color: var(--rm-accent); color: #fff; box-shadow: 0 0 0 0.25px rgba(0, 174, 239, 0.25); }
+        .form-control[readonly] { background-color: #1A1A1A; border-color: #333; color: #888; cursor: not-allowed; }
+        .form-label { color: var(--rm-text-secondary); font-weight: 600; font-size: 0.9rem; }
+        
+        /* Estilización personalizada del Checkbox de Bootstrap para modo oscuro */
+        .form-check-input { background-color: #252525; border-color: #555; }
+        .form-check-input:checked { background-color: var(--rm-accent); border-color: var(--rm-accent); }
+        .form-check-label { color: #fff; font-weight: 600; }
 
-    <div class="form-group">
-        <label for="nombreArtistico">Nombre Artístico:</label>
-        <input type="text" name="nombreArtistico" id="nombreArtistico" class="form-control" value="{{ item.nombreArtistico }}" required>
-    </div>
+        .btn-volver { color: #E0E0E0; font-weight: 600; transition: color 0.2s; }
+        .btn-volver:hover { color: var(--rm-accent); }
 
-    <div class="form-group">
-        <label for="generoPrincipal">Género Principal:</label>
-        <input type="text" name="generoPrincipal" id="generoPrincipal" class="form-control" value="{{ item.generoPrincipal }}" required>
-    </div>
+        .btn-rm-accent { background-color: var(--rm-accent); color: #000; font-weight: 700; border: none; }
+        .btn-rm-accent:hover { background-color: #009cd4; color: #000; }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-rm d-flex justify-content-between align-items-center">
+        <a href="{% url 'index' %}" class="text-decoration-none d-flex align-items-center gap-2">
+            <img src="{% static 'images/Logo.png' %}" alt="Icono RollsMusic" style="max-height: 45px; width: auto;">
+            <span class="fs-4 fw-bold text-white mb-0">RollsMusic</span>
+        </a>
+    </nav>
 
-    <div class="form-group">
-        <label for="biografia">Biografía:</label>
-        <textarea name="biografia" id="biografia" class="form-control">{{ item.biografia }}</textarea>
-    </div>
+    <div class="container mt-5" style="max-width: 650px;">
+        <a href="{% url 'listar_artistas' %}" class="text-decoration-none btn-volver d-inline-flex align-items-center mb-3">
+            <i class="bi bi-arrow-left-short fs-4 text-info"></i> Cancelar y volver
+        </a>
+        
+        <div class="admin-card">
+            <div class="d-flex align-items-center mb-4">
+                <i class="bi bi-pencil-square fs-2 me-3 text-info"></i>
+                <div>
+                    <h3 class="fw-bold mb-0 text-white">Editar Artista</h3>
+                    <p class="fw-semibold mb-0" style="font-size: 0.85rem; color: var(--rm-text-secondary);">Actualiza la información del perfil del artista.</p>
+                </div>
+            </div>
 
-    <div class="form-check mb-3">
-        <input type="checkbox" name="verificado" id="verificado" class="form-check-input" {% if item.verificado %}checked{% endif %}>
-        <label class="form-check-label" for="verificado">Artista Verificado</label>
-    </div>
+            <form method="POST">
+                {% csrf_token %}
+                <div class="mb-3">
+                    <label class="form-label">Usuario Asociado (No editable)</label>
+                    <input type="text" class="form-control" value="{{ item.Usuario_idUsuario.nombre }} {{ item.Usuario_idUsuario.apellido }}" readonly>
+                </div>
 
-    <div class="form-group">
-        <label for="discografica">Discográfica:</label>
-        <select name="discografica" id="discografica" class="form-control" required>
-            {% for disco in discograficas %}
-                <option value="{{ disco.idDiscografica }}" {% if disco.idDiscografica == item.Discografica_idDiscografica.idDiscografica %}selected{% endif %}>
-                    {{ disco.nombre }}
-                </option>
-            {% endfor %}
-        </select>
-    </div>
+                <div class="mb-3">
+                    <label for="nombreArtistico" class="form-label">Nombre Artístico</label>
+                    <input type="text" name="nombreArtistico" id="nombreArtistico" class="form-control" value="{{ item.nombreArtistico }}" required>
+                </div>
 
-    <button type="submit" class="btn btn-success">Guardar Cambios</button>
-</form>
+                <div class="mb-3">
+                    <label for="generoPrincipal" class="form-label">Género Principal</label>
+                    <input type="text" name="generoPrincipal" id="generoPrincipal" class="form-control" value="{{ item.generoPrincipal }}" required>
+                </div>
+
+                <div class="mb-3">
+                    <label for="biografia" class="form-label">Biografía</label>
+                    <textarea name="biografia" id="biografia" class="form-control" rows="4">{{ item.biografia }}</textarea>
+                </div>
+
+                <div class="form-check mb-4">
+                    <input type="checkbox" name="verificado" id="verificado" class="form-check-input" {% if item.verificado %}checked{% endif %}>
+                    <label class="form-check-label ms-1" for="verificado">
+                        <i class="bi bi-patch-check-fill text-info me-1"></i> Artista Verificado
+                    </label>
+                </div>
+
+                <div class="mb-4">
+                    <label for="discografica" class="form-label">Discográfica</label>
+                    <select name="discografica" id="discografica" class="form-select" required>
+                        {% for disco in discograficas %}
+                            <option value="{{ disco.idDiscografica }}" {% if disco.idDiscografica == item.Discografica_idDiscografica.idDiscografica %}selected{% endif %}>
+                                {{ disco.nombre }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <button type="submit" class="btn btn-rm-accent w-100 py-2.5 rounded text-uppercase tracking-wider">
+                    <i class="bi bi-arrow-clockwise me-2"></i> Guardar Cambios
+                </button>
+            </form>
+        </div>
+    </div>
+</body>
+</html>

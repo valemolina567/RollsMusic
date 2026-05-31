@@ -1,23 +1,106 @@
-<h1>Discográficas Registradas</h1>
-<a href="{% url 'index' %}">⬅️ Volver al Panel</a> | <a href="{% url 'crear_discografica' %}">Añadir Discográfica</a>
-<br><br>
-<table border="1">
-    <tr>
-        <th>ID</th><th>Nombre</th><th>País</th><th>Fundación</th><th>Acciones</th>
-    </tr>
-    {% for item in items %}
-    <tr>
-        <td>{{ item.idDiscografica }}</td>
-        <td>{{ item.nombre }}</td>
-        <td>{{ item.pais }}</td>
-        <td>{{ item.fechaFundacion }}</td>
-        <td>
-            <a href="{% url 'editar_discografica' item.idDiscografica %}">Editar</a>
-            <form action="{% url 'eliminar_discografica' item.idDiscografica %}" method="POST" style="display:inline;">
-                {% csrf_token %}
-                <button type="submit" onclick="return confirm('¿Eliminar discográfica?')">Eliminar</button>
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Discográficas - RollsMusic</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+    <style>
+        :root { --rm-bg: #111111; --rm-surface: #1E1E1E; --rm-accent: #00AEEF; --rm-text-primary: #FFFFFF; --rm-text-secondary: #CCCCCC; }
+        body { background-color: var(--rm-bg); color: var(--rm-text-primary); font-family: 'Segoe UI', sans-serif; padding-bottom: 50px; }
+        .text-muted { color: var(--rm-text-secondary) !important; }
+        .navbar-rm { background-color: var(--rm-surface); padding: 15px 30px; border-bottom: 1px solid #333; }
+        .admin-card { background-color: var(--rm-surface); border-radius: 8px; border: 1px solid #333; padding: 30px; margin-top: 20px; }
+        
+        .table-rm { background-color: #252525; color: var(--rm-text-primary); border-color: #333; }
+        .table-rm th { background-color: #1E1E1E; color: var(--rm-text-secondary); border-bottom: 2px solid #333; }
+        .table-rm td { vertical-align: middle; border-color: #333; }
+        
+        .btn-rm-accent { background-color: var(--rm-accent); color: #000; font-weight: 700; border: none; }
+        .btn-rm-accent:hover { background-color: #009cd4; color: #000; }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-rm d-flex justify-content-between align-items-center">
+        <a href="{% url 'index' %}" class="text-decoration-none d-flex align-items-center gap-2">
+            <img src="{% static 'images/Logo.png' %}" alt="Icono RollsMusic" style="max-height: 45px; width: auto;">
+            <span class="fs-4 fw-bold text-white mb-0" style="letter-spacing: -0.5px;">RollsMusic</span>
+        </a>
+        <div class="d-flex align-items-center gap-3">
+            <span class="badge bg-secondary rounded-pill px-3 fs-6">Módulo de Discográficas</span>
+            <a class="btn btn-outline-light btn-sm rounded-pill px-3" href="{% url 'index' %}"><i class="bi bi-arrow-left me-1"></i> Panel</a>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+            <div>
+                <h2 class="fw-bold mb-0 text-white"><i class="bi bi-building text-info me-2"></i> Discográficas Registradas</h2>
+                <p class="text-muted fw-bold mb-0">Administración de empresas discográficas y firmas asociadas.</p>
+            </div>
+            <a href="{% url 'crear_discografica' %}" class="btn btn-rm-accent rounded-pill px-4">
+                <i class="bi bi-plus-circle-fill me-2"></i> Añadir Discográfica
+            </a>
+        </div>
+
+        <div class="admin-card p-3 mb-4">
+            <form method="GET" action="{% url 'listar_discograficas' %}" class="row g-2 align-items-center">
+                <div class="col-10 col-md-11">
+                    <div class="input-group">
+                        <span class="input-group-text bg-dark border-secondary text-muted"><i class="bi bi-search"></i></span>
+                        <input type="text" name="q" class="form-control" placeholder="Buscar discográfica por nombre..." value="{{ request.GET.q }}">
+                    </div>
+                </div>
+                <div class="col-2 col-md-1">
+                    <button type="submit" class="btn btn-info w-100 text-dark fw-bold"><i class="bi bi-sliders"></i></button>
+                </div>
             </form>
-        </td>
-    </tr>
-    {% endfor %}
-</table>
+        </div>
+
+        <div class="admin-card p-0 overflow-hidden">
+            <div class="table-responsive">
+                <table class="table table-dark table-striped table-hover table-rm mb-0">
+                    <thead>
+                        <tr>
+                            <th class="ps-4">ID</th>
+                            <th>Nombre de la Empresa</th>
+                            <th>País Sede</th>
+                            <th>Fecha de Fundación</th>
+                            <th class="text-center pe-4">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in items %}
+                        <tr>
+                            <td class="ps-4 fw-bold text-muted">{{ item.idDiscografica }}</td>
+                            <td class="fw-bold text-white"><i class="bi bi-building-fill text-info me-2"></i> {{ item.nombre }}</td>
+                            <td><span class="badge bg-dark border border-secondary px-3"><i class="bi bi-geo-alt-fill me-1 text-muted"></i> {{ item.pais }}</span></td>
+                            <td>{{ item.fechaFundacion }}</td>
+                            <td class="text-center pe-4">
+                                <div class="d-inline-flex gap-2">
+                                    <a href="{% url 'editar_discografica' item.idDiscografica %}" class="btn btn-outline-info btn-sm">
+                                        <i class="bi bi-pencil-square"></i> Editar
+                                    </a>
+                                    <form action="{% url 'eliminar_discografica' item.idDiscografica %}" method="POST" onsubmit="return confirm('¿Seguro que deseas eliminar esta discográfica?');">
+                                        {% csrf_token %}
+                                        <button type="submit" class="btn btn-outline-danger btn-sm">
+                                            <i class="bi bi-trash3-fill"></i> Eliminar
+                                        </button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="5" class="text-center py-4 text-muted">No hay discográficas registradas en la plataforma.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

@@ -198,9 +198,18 @@ def eliminar_album(request, id):
 # ==========================================
 # CRUD: CANCIONES
 # ==========================================
+
 @verificar_rol(['Admin'])
 def listar_canciones(request):
-    items = Cancion.objects.all()
+    query = request.GET.get('q', '').strip() # Captura lo que el usuario escribió
+    
+    if query:
+        # Filtra si el título contiene la palabra
+        items = Cancion.objects.filter(titulo__icontains=query)
+    else:
+        # Si no hay búsqueda, trae todo el inventario
+        items = Cancion.objects.all()
+        
     return render(request, 'canciones/listar.html', {'items': items})
 
 @verificar_rol(['Admin'])
@@ -363,16 +372,32 @@ def crear_usuario(request):
 @verificar_rol(['Admin'])
 def editar_usuario(request, id):
     usuario = get_object_or_404(Usuario, idUsuario=id)
+    
+    # 1. Traemos todos los roles para que el menú select tenga opciones
+    roles = Rol.objects.all() 
+    
     if request.method == 'POST':
         usuario.nombre = request.POST.get('nombre')
         usuario.apellido = request.POST.get('apellido')
         usuario.correo = request.POST.get('correo')
         usuario.estado = request.POST.get('estado')
+        
         if request.POST.get('fechaNacimiento'):
             usuario.fechaNacimiento = request.POST.get('fechaNacimiento')
+            
+        # 2. Capturamos el rol seleccionado y lo actualizamos
+        id_rol = request.POST.get('rol')
+        if id_rol:
+            usuario.Rol_idRol = int(id_rol) # O "usuario.rol_id = id_rol" según cómo se llame el campo FK en tu modelo
+            
         usuario.save()
-        return redirect('listar_usuarios') # Corregido
-    return render(request, 'usuarios/editar.html', {'usuario': usuario})
+        return redirect('listar_usuarios')
+        
+    # 3. Agregamos 'roles' al diccionario de contexto
+    return render(request, 'usuarios/editar.html', {
+        'usuario': usuario,
+        'roles': roles
+    })
 
 @verificar_rol(['Admin'])
 def eliminar_usuario(request, id):

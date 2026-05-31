@@ -1,45 +1,108 @@
-<h1>Crear Nuevo Usuario</h1>
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crear Usuario - RollsMusic</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+    <style>
+        :root { --rm-bg: #111111; --rm-surface: #1E1E1E; --rm-accent: #00AEEF; --rm-text-primary: #FFFFFF; --rm-text-secondary: #CCCCCC; }
+        body { background-color: var(--rm-bg); color: var(--rm-text-primary); font-family: 'Segoe UI', sans-serif; padding-bottom: 50px; }
+        .navbar-rm { background-color: var(--rm-surface); padding: 15px 30px; border-bottom: 1px solid #333; }
+        .admin-card { background-color: var(--rm-surface); border-radius: 8px; border: 1px solid #333; padding: 30px; margin-top: 20px; }
+        
+        .form-control, .form-select { background-color: #252525; border: 1px solid #444; color: #fff; }
+        .form-control:focus, .form-select:focus { background-color: #2a2a2a; border-color: var(--rm-accent); color: #fff; box-shadow: 0 0 0 0.25px rgba(0, 174, 239, 0.25); }
+        .form-label { color: var(--rm-text-secondary); font-weight: 600; font-size: 0.9rem; }
+        
+        input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(1); cursor: pointer; }
+        .btn-volver { color: #E0E0E0; font-weight: 600; transition: color 0.2s; }
+        .btn-volver:hover { color: var(--rm-accent); }
 
-{% if messages %}
-    <ul>
-        {% for message in messages %}
-            <li style="color:red">{{ message }}</li>
-        {% endfor %}
-    </ul>
-{% endif %}
+        .btn-rm-accent { background-color: var(--rm-accent); color: #000; font-weight: 700; border: none; }
+        .btn-rm-accent:hover { background-color: #009cd4; color: #000; }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-rm d-flex justify-content-between align-items-center">
+        <a href="{% url 'index' %}" class="text-decoration-none d-flex align-items-center gap-2">
+            <img src="{% static 'images/Logo.png' %}" alt="Icono RollsMusic" style="max-height: 45px; width: auto;">
+            <span class="fs-4 fw-bold text-white mb-0">RollsMusic</span>
+        </a>
+    </nav>
 
-<a href="{% url 'listar_usuarios' %}">⬅️ Cancelar y volver</a>
-<br><br>
+    <div class="container mt-5" style="max-width: 650px;">
+        <a href="{% url 'listar_usuarios' %}" class="text-decoration-none btn-volver d-inline-flex align-items-center mb-3">
+            <i class="bi bi-arrow-left-short fs-4 text-info"></i> Cancelar y volver
+        </a>
+        
+        <div class="admin-card">
+            <div class="d-flex align-items-center mb-4">
+                <i class="bi bi-person-plus-fill fs-2 me-3 text-info"></i>
+                <div>
+                    <h3 class="fw-bold mb-0 text-white">Crear Nuevo Usuario</h3>
+                    <p class="fw-semibold mb-0" style="font-size: 0.85rem; color: var(--rm-text-secondary);">Da de alta credenciales e información de perfil en el sistema.</p>
+                </div>
+            </div>
 
-<form method="POST">
-    {% csrf_token %}
+            {% if messages %}
+                <div class="alert alert-danger bg-danger bg-opacity-10 border-danger text-danger py-2 px-3 mb-4 rounded" role="alert">
+                    <ul class="mb-0 ps-3">
+                        {% for message in messages %}
+                            <li><strong>Error:</strong> {{ message }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            {% endif %}
 
-    <label for="fechaNacimiento">Fecha de Nacimiento:</label><br>
-    <input type="date" id="fechaNacimiento" name="fechaNacimiento" required><br><br>
-    
-    <label for="nombre">Nombre:</label><br>
-    <input type="text" id="nombre" name="nombre" placeholder="Nombre" required><br><br>
-    
-    <label for="apellido">Apellido:</label><br>
-    <input type="text" id="apellido" name="apellido" placeholder="Apellido" required><br><br>
-    
-    <label for="correo">Correo Electrónico:</label><br>
-    <input type="email" id="correo" name="correo" placeholder="ejemplo@correo.com" required><br><br>
-    
-    <label for="contrasenia">Contraseña:</label><br>
-    <input type="password" id="contrasenia" name="contrasenia" placeholder="Contraseña" required><br><br>    
+            <form method="POST">
+                {% csrf_token %}
+                
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label for="nombre" class="form-label">Nombre</label>
+                        <input type="text" id="nombre" name="nombre" class="form-control" placeholder="Nombre" required>
+                    </div>
+                    <div class="col-md-6">
+                        <label for="apellido" class="form-label">Apellido</label>
+                        <input type="text" id="apellido" name="apellido" class="form-control" placeholder="Apellido" required>
+                    </div>
+                </div>
 
-    <div class="form-group">
-        <label for="rol">Rol del Usuario:</label>
-        <select name="rol" id="rol" class="form-control">
-            {% for rol in roles %}
-            <option value="{{ rol.idRol }}" {% if rol.idRol == 2 %}selected{% endif %}>
-                {{ rol.nombre }}
-            </option>
-            {% endfor %}
-        </select>
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label for="fechaNacimiento" class="form-label">Fecha de Nacimiento</label>
+                        <input type="date" id="fechaNacimiento" name="fechaNacimiento" class="form-control" required>
+                    </div>
+                    <div class="col-md-6">
+                        <label for="rol" class="form-label">Rol del Usuario</label>
+                        <select name="rol" id="rol" class="form-select">
+                            {% for rol in roles %}
+                            <option value="{{ rol.idRol }}" {% if rol.idRol == 2 %}selected{% endif %}>
+                                {{ rol.nombre }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label for="correo" class="form-label">Correo Electrónico</label>
+                    <input type="email" id="correo" name="correo" class="form-control" placeholder="ejemplo@correo.com" required>
+                </div>
+
+                <div class="mb-4">
+                    <label for="contrasenia" class="form-label">Contraseña de Acceso</label>
+                    <input type="password" id="contrasenia" name="contrasenia" class="form-control" placeholder="Asigna una contraseña segura" required>
+                </div>
+
+                <button type="submit" class="btn btn-rm-accent w-100 py-2.5 rounded text-uppercase tracking-wider">
+                    <i class="bi bi-check-circle-fill me-2"></i> Guardar Usuario
+                </button>
+            </form>
+        </div>
     </div>
-
-    <button type="submit">➕ Guardar Usuario</button>
-
-</form>
+</body>
+</html>
