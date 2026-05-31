@@ -54,6 +54,11 @@ urlpatterns = [
     path('logout/', views.logout_view, name='logout'),
     
     path('dashboard/usuario/', views.dashboard_usuario, name='dashboard_usuario'),
+    path('dashboard/usuario/nueva-playlist/', views.crear_playlist_usuario, name='crear_playlist_usuario'),
+    # --- NUEVAS RUTAS ASÍNCRONAS PARA GESTIÓN DE CANCIONES ---
+    path('playlist/detalles/<int:id_playlist>/', views.obtener_detalles_playlist, name='obtener_detalles_playlist'),
+    path('playlist/agregar/<int:id_playlist>/<int:id_cancion>/', views.agregar_cancion_playlist, name='agregar_cancion_playlist'),
+    
     path('dashboard/usuario/pagar/', views.procesar_pago, name='procesar_pago'),
     path('dashboard/artista/', views.dashboard_artista, name='dashboard_artista'),
     path('dashboard/artista/nuevo-album/', views.crear_album_artista, name='crear_album_artista'), 

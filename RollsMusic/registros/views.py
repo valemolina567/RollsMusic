@@ -493,20 +493,34 @@ def dashboard_usuario(request):
     if not usuario_id:
         return redirect('login')
         
-    top_canciones = []
+    top_canciones, playlists_usuario = [], []
+    auto_open_id = request.session.pop('auto_open_playlist_id', None)
     
     with connection.cursor() as cursor:
         try:
-            # 1. TOP CANCIONES: Se consulta siempre fresco para que se re-posicione en tiempo real al refrescar
+            # Lista "Lo que más escuchas" siempre actualizada
             cursor.execute("EXEC Reportes.sp_TopCancionesUsuario %s", [usuario_id])
             columns_top = [col[0] for col in cursor.description]
             top_canciones = [dict(zip(columns_top, row)) for row in cursor.fetchall()]
-        except Exception as e:
+            
+            # Localizar y mapear la tabla de playlists del cliente de forma dinámica
+            cursor.execute("SELECT TABLE_SCHEMA, TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME LIKE '%Playlist%'")
+            p_table = cursor.fetchone()
+            if p_table:
+                schema_p, name_p = p_table[0], p_table[1]
+                cursor.execute(f"SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = '{schema_p}' AND TABLE_NAME = '{name_p}'")
+                p_cols = [r[0] for r in cursor.fetchall()]
+                col_user = 'Usuario_idUsuario' if 'Usuario_idUsuario' in p_cols else ('idUsuario' if 'idUsuario' in p_cols else 'Usuario_id')
+                col_nombre = 'nombre' if 'nombre' in p_cols else ('titulo' if 'titulo' in p_cols else p_cols[1])
+                col_id = 'idPlaylist' if 'idPlaylist' in p_cols else ('id' if 'id' in p_cols else p_cols[0])
+                
+                cursor.execute(f"SELECT {col_id}, {col_nombre} FROM {schema_p}.{name_p} WHERE {col_user} = %s", [usuario_id])
+                playlists_usuario = cursor.fetchall()
+        except Exception:
             pass
 
-    # 2. CACHÉ DE RECOMENDACIONES: Evita que desaparezcan al reproducir o dar F5
+    # Memoria de Sesión Completa para congelar la lista "Especialmente para ti"
     recomendaciones = request.session.get('recomendaciones_cache')
-    
     if not recomendaciones:
         recomendaciones = []
         with connection.cursor() as cursor:
@@ -516,7 +530,6 @@ def dashboard_usuario(request):
                 raw_recs = [dict(zip(columns_rec, row)) for row in cursor.fetchall()]
                 
                 for r in raw_recs:
-                    # Mapeo tolerante a variantes de nombres de columnas del SP
                     id_can = r.get('idCancion') or r.get('id_cancion') or r.get('id')
                     tit_can = r.get('Cancion') or r.get('titulo')
                     art_can = r.get('Artista') or r.get('nombreArtistico') or r.get('nombre')
@@ -524,24 +537,20 @@ def dashboard_usuario(request):
                     
                     if id_can:
                         recomendaciones.append({
-                            'idCancion': id_can,
-                            'Cancion': tit_can,
-                            'Artista': art_can,
-                            'Album': alb_can
+                            'idCancion': id_can, 'Cancion': tit_can, 'Artista': art_can, 'Album': alb_can
                         })
-                
-                # Guardamos la lista en la sesión del navegador
                 request.session['recomendaciones_cache'] = recomendaciones
-            except Exception as e:
+            except Exception:
                 recomendaciones = []
 
-    # Recuperar información básica del plan (Simulado o desde sesión)
     plan_info = request.session.get('plan_info', {'plan_nombre': 'Premium', 'suscripcion_estado': 'Activa'})
 
     context = {
         'top_canciones': top_canciones,
         'recomendaciones': recomendaciones,
         'plan_info': plan_info,
+        'playlists': playlists_usuario,
+        'auto_open_playlist_id': auto_open_id,
     }
     return render(request, 'dashboards/usuario.html', context)
 
@@ -697,10 +706,8 @@ def verificar_suscripciones(request):
 @verificar_rol(['Cliente', 'Admin'])
 def registrar_reproduccion(request, id_cancion):
     usuario_id = request.session['usuario_id']
-    
     with connection.cursor() as cursor:
         try:
-            # 1. Obtener datos de la canción para retornar al reproductor
             cursor.execute("SELECT duracion, titulo FROM Catalogo.Cancion WHERE idCancion = %s", [id_cancion])
             cancion = cursor.fetchone()
             
@@ -710,7 +717,7 @@ def registrar_reproduccion(request, id_cancion):
             duracion_segundos = cancion[0]
             titulo_cancion = cancion[1]
 
-            # 2. Inserción en la base de datos (Ejecuta tu Trigger automáticamente)
+            # Inserción asíncrona que despierta tu disparador automático (Trigger de BD)
             cursor.execute("""
                 INSERT INTO Usuarios.Reproduccion 
                 (fechaHora, dispositivo, pais, duracionEscuchada, completada, Usuario_idUsuario, Cancion_idCancion)
@@ -718,14 +725,9 @@ def registrar_reproduccion(request, id_cancion):
                 (GETDATE(), 'Navegador Web', 'Ecuador', %s, 1, %s, %s)
             """, [duracion_segundos, usuario_id, id_cancion])
             
-            # RETORNO JSON: Django responde en segundo plano con los metadatos de la pista
             return JsonResponse({
-                'status': 'success',
-                'idCancion': id_cancion,
-                'titulo': titulo_cancion,
-                'duracion': duracion_segundos
+                'status': 'success', 'idCancion': id_cancion, 'titulo': titulo_cancion, 'duracion': duracion_segundos
             })
-            
         except DatabaseError as db_err:
             return JsonResponse({'status': 'error', 'message': f'Filtro de BD: {str(db_err)}'}, status=400)
         except Exception as e:
@@ -809,6 +811,138 @@ def subir_cancion_artista(request):
                 
     return redirect('dashboard_artista')
 
+@verificar_rol(['Cliente', 'Admin'])
+def crear_playlist_usuario(request):
+    if request.method == 'POST':
+        nombre = request.POST.get('nombre', '').strip()
+        usuario_id = request.session['usuario_id']
+        
+        if not nombre:
+            messages.error(request, "El nombre de la playlist no puede estar vacío.")
+            return redirect('dashboard_usuario')
+            
+        with connection.cursor() as cursor:
+            try:
+                cursor.execute("SELECT TABLE_SCHEMA, TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME LIKE '%Playlist%'")
+                p_table = cursor.fetchone()
+                
+                if p_table:
+                    schema_p, name_p = p_table[0], p_table[1]
+                    cursor.execute(f"SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = '{schema_p}' AND TABLE_NAME = '{name_p}'")
+                    p_cols = [r[0] for r in cursor.fetchall()]
+                    
+                    col_user = 'Usuario_idUsuario' if 'Usuario_idUsuario' in p_cols else ('idUsuario' if 'idUsuario' in p_cols else 'Usuario_id')
+                    col_nombre = 'nombre' if 'nombre' in p_cols else ('titulo' if 'titulo' in p_cols else p_cols[1])
+                    col_fecha = 'fechaCreacion' if 'fechaCreacion' in p_cols else ('fecha' if 'fecha' in p_cols else None)
+                    col_desc = 'descripcion' if 'descripcion' in p_cols else ('description' if 'description' in p_cols else None)
+                    col_colab = 'colaborativa' if 'colaborativa' in p_cols else ('colaborativo' if 'colaborativo' in p_cols else None)
+                    col_id = 'idPlaylist' if 'idPlaylist' in p_cols else ('id' if 'id' in p_cols else p_cols[0])
+                    
+                    cols, vals, placeholders = [col_nombre, col_user], [nombre, usuario_id], ["%s", "%s"]
+                    
+                    if col_desc:
+                        cols.append(col_desc); vals.append('Playlist personalizada.'); placeholders.append("%s")
+                    if col_colab:
+                        cols.append(col_colab); vals.append(0); placeholders.append("%s")
+                    
+                    sql_cols = ", ".join(cols) + (f", {col_fecha}" if col_fecha else "")
+                    sql_vals = ", ".join(placeholders) + (", GETDATE()" if col_fecha else "")
+                    
+                    cursor.execute(f"INSERT INTO {schema_p}.{name_p} ({sql_cols}) VALUES ({sql_vals})", vals)
+                    
+                    # Captura del ID para activar el auto-open inmediato en el HTML
+                    cursor.execute(f"SELECT MAX({col_id}) FROM {schema_p}.{name_p} WHERE {col_user} = %s", [usuario_id])
+                    new_id = cursor.fetchone()
+                    if new_id:
+                        request.session['auto_open_playlist_id'] = new_id[0]
+                        
+                    messages.success(request, f"Playlist '{nombre}' creada")
+                else:
+                    messages.error(request, "No se localizó la tabla de Playlists.")
+            except Exception as e:
+                messages.error(request, f"Fallo al registrar la playlist: {str(e)}")
+                
+    return redirect('dashboard_usuario')
+
+@verificar_rol(['Cliente', 'Admin'])
+def obtener_detalles_playlist(request, id_playlist):
+    with connection.cursor() as cursor:
+        try:
+            # Encontrar de forma segura la tabla intermedia de mapeo Playlist ⇄ Canción
+            cursor.execute("""
+                SELECT TABLE_SCHEMA, TABLE_NAME FROM (
+                    SELECT TABLE_SCHEMA, TABLE_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE COLUMN_NAME LIKE '%Playlist%'
+                    INTERSECT
+                    SELECT TABLE_SCHEMA, TABLE_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE COLUMN_NAME LIKE '%Cancion%'
+                ) AS Bridge WHERE TABLE_NAME NOT LIKE 'Playlist'
+            """)
+            bridge_table = cursor.fetchone()
+            if not bridge_table:
+                return JsonResponse({'status': 'error', 'message': 'Falta la tabla intermedia de relación.'}, status=404)
+                
+            schema_b, name_b = bridge_table[0], bridge_table[1]
+            cursor.execute(f"SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = '{schema_b}' AND TABLE_NAME = '{name_b}'")
+            b_cols = [r[0] for r in cursor.fetchall()]
+            col_b_playlist = 'Playlist_idPlaylist' if 'Playlist_idPlaylist' in b_cols else ('idPlaylist' if 'idPlaylist' in b_cols else [c for c in b_cols if 'Playlist' in c][0])
+            col_b_cancion = 'Cancion_idCancion' if 'Cancion_idCancion' in b_cols else ('idCancion' if 'idCancion' in b_cols else [c for c in b_cols if 'Cancion' in c][0])
+
+            cursor.execute("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'Catalogo' AND TABLE_NAME = 'Cancion'")
+            c_cols = [r[0] for r in cursor.fetchall()]
+            col_c_id = 'idCancion' if 'idCancion' in c_cols else 'id'
+
+            # A. Canciones actuales dentro de la playlist seleccionada
+            cursor.execute(f"""
+                SELECT C.{col_c_id}, C.titulo FROM Catalogo.Cancion C
+                INNER JOIN {schema_b}.{name_b} B ON C.{col_c_id} = B.{col_b_cancion}
+                WHERE B.{col_b_playlist} = %s
+            """, [id_playlist])
+            canciones_guardadas = [{'id': r[0], 'titulo': r[1]} for r in cursor.fetchall()]
+
+            # B. Catálogo global total disponible para adición (+)
+            cursor.execute(f"SELECT {col_c_id}, titulo FROM Catalogo.Cancion")
+            todas_canciones = [{'id': r[0], 'titulo': r[1]} for r in cursor.fetchall()]
+
+            return JsonResponse({
+                'status': 'success', 'id_playlist': id_playlist, 'guardadas': canciones_guardadas, 'disponibles': todas_canciones
+            })
+        except Exception as e:
+            return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+
+
+@verificar_rol(['Cliente', 'Admin'])
+def agregar_cancion_playlist(request, id_playlist, id_cancion):
+    with connection.cursor() as cursor:
+        try:
+            cursor.execute("""
+                SELECT TABLE_SCHEMA, TABLE_NAME FROM (
+                    SELECT TABLE_SCHEMA, TABLE_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE COLUMN_NAME LIKE '%Playlist%'
+                    INTERSECT
+                    SELECT TABLE_SCHEMA, TABLE_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE COLUMN_NAME LIKE '%Cancion%'
+                ) AS Bridge WHERE TABLE_NAME NOT LIKE 'Playlist'
+            """)
+            bridge_table = cursor.fetchone()
+            schema_b, name_b = bridge_table[0], bridge_table[1]
+            
+            cursor.execute(f"SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = '{schema_b}' AND TABLE_NAME = '{name_b}'")
+            b_cols = [r[0] for r in cursor.fetchall()]
+            col_b_playlist = 'Playlist_idPlaylist' if 'Playlist_idPlaylist' in b_cols else ('idPlaylist' if 'idPlaylist' in b_cols else [c for c in b_cols if 'Playlist' in c][0])
+            col_b_cancion = 'Cancion_idCancion' if 'Cancion_idCancion' in b_cols else ('idCancion' if 'idCancion' in b_cols else [c for c in b_cols if 'Cancion' in c][0])
+
+            # CORRECCIÓN: Detectar dinámicamente columnas de auditoría temporal (fechaAgregada)
+            col_b_fecha = 'fechaAgregada' if 'fechaAgregada' in b_cols else ('fecha_agregada' if 'fecha_agregada' in b_cols else ('fecha' if 'fecha' in b_cols else None))
+
+            if col_b_fecha:
+                # Si la columna existe, le mandamos la marca de tiempo de SQL Server
+                cursor.execute(f"""
+                    INSERT INTO {schema_b}.{name_b} ({col_b_playlist}, {col_b_cancion}, {col_b_fecha}) 
+                    VALUES (%s, %s, GETDATE())
+                """, [id_playlist, id_cancion])
+            else:
+                cursor.execute(f"INSERT INTO {schema_b}.{name_b} ({col_b_playlist}, {col_b_cancion}) VALUES (%s, %s)", [id_playlist, id_cancion])
+                
+            return JsonResponse({'status': 'success', 'message': 'Pista vinculada con éxito.'})
+        except Exception as e:
+            return JsonResponse({'status': 'error', 'message': f'Fallo de relación: {str(e)}'}, status=400)
 
 def logout_view(request):
     # Limpiamos por completo la sesión del navegador

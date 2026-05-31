@@ -19,14 +19,24 @@
         .plan-banner.premium { border-left-color: var(--rm-accent); }
         .plan-title { color: var(--rm-text-secondary); text-transform: uppercase; font-size: 0.8rem; font-weight: 700; letter-spacing: 1px; }
 
-        .section-title { font-size: 1.4rem; font-weight: 700; margin-bottom: 20px; border-bottom: 2px solid var(--rm-surface); padding-bottom: 10px; }
-        .track-list-container { background-color: var(--rm-surface); border-radius: 8px; padding: 10px; border: 1px solid #333; }
+        .section-title { font-size: 1.3rem; font-weight: 700; margin-bottom: 20px; border-bottom: 2px solid var(--rm-surface); padding-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
+        .track-list-container { background-color: var(--rm-surface); border-radius: 8px; padding: 10px; border: 1px solid #333; min-height: 250px; }
         .track-item { padding: 15px; border-radius: 4px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #2a2a2a; transition: background-color 0.2s; }
         .track-item:last-child { border-bottom: none; }
         .track-item:hover { background-color: #252525; }
         
         .btn-play-track { color: var(--rm-accent); background-color: transparent; border: 2px solid var(--rm-accent); border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s; }
         .btn-play-track:hover { background-color: var(--rm-accent); color: #fff; transform: scale(1.05); }
+
+        /* Estilos de Modals e Inputs */
+        .modal-content { background-color: var(--rm-surface); border: 1px solid #444; color: var(--rm-text-primary); }
+        .modal-header { border-bottom: 1px solid #333; }
+        .modal-footer { border-top: 1px solid #333; }
+        .rm-input { background-color: transparent; border: 2px solid #444; color: var(--rm-text-primary); padding: 12px; }
+        .rm-input:focus { background-color: transparent; border-color: var(--rm-accent); color: var(--rm-text-primary); box-shadow: none; }
+
+        /* Contenedores de scroll internos para la vista dividida */
+        .split-scroll-box { max-height: 380px; overflow-y: auto; background-color: #141414; border: 1px solid #333; border-radius: 6px; padding: 10px; }
 
         /* REPRODUCTOR PERSISTENTE */
         .player-bar { position: fixed; bottom: 0; left: 0; right: 0; height: 90px; background-color: #181818; border-top: 1px solid #282828; padding: 0 20px; z-index: 1000; display: flex; align-items: center; justify-content: space-between; }
@@ -42,6 +52,22 @@
         .btn-player-action:hover { color: #fff; transform: scale(1.05); }
         .btn-player-main { color: #fff; font-size: 2rem; line-height: 1; }
         .btn-player-main:hover { transform: scale(1.1); }
+
+        /* Forzar un color gris claro de alto contraste para el texto del placeholder */
+        .rm-input::placeholder {
+            color: #8A8A8A !important;
+            opacity: 1 !important;
+        }
+
+        /* Darle una base de fondo ligeramente más clara que la superficie para destacar el campo */
+        #search-songs-input.rm-input {
+            background-color: #252525 !important;
+            border: 2px solid #3A3A3A !important;
+        }
+
+        #search-songs-input.rm-input:focus {
+            border-color: var(--rm-accent) !important;
+}
     </style>
 </head>
 <body>
@@ -53,8 +79,16 @@
         </div>
     </nav>
 
-    <div class="container mt-4">
+    <div class="container-fluid px-4 mt-4">
         <div id="alert-container"></div>
+
+        {% if messages %}
+            {% for message in messages %}
+                <div class="alert alert-{% if message.tags == 'error' %}danger{% else %}success{% endif %} text-white border-0 fw-bold mb-4" style="background-color: {% if message.tags == 'error' %}#dc3545{% else %}#198754{% endif %};" role="alert">
+                    <i class="bi {% if message.tags == 'error' %}bi-exclamation-octagon-fill{% else %}bi-check-circle-fill{% endif %} me-2"></i> {{ message }}
+                </div>
+            {% endfor %}
+        {% endif %}
 
         <div class="plan-banner premium d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
             <div>
@@ -68,14 +102,36 @@
         </div>
 
         <div class="row">
-            <div class="col-lg-6 mb-4">
-                <h3 class="section-title"><i class="bi bi-magic me-2" style="color: var(--rm-accent);"></i>Especialmente para ti</h3>
+            <div class="col-xl-4 col-lg-5 mb-4">
+                <div class="section-title">
+                    <span><i class="bi bi-music-note-list me-2" style="color: var(--rm-accent);"></i>Tus Playlists</span>
+                    <button class="btn btn-sm btn-outline-info rounded-pill fw-bold px-3" data-bs-toggle="modal" data-bs-target="#modalPlaylist"><i class="bi bi-plus-lg"></i> Crear</button>
+                </div>
+                <div class="track-list-container">
+                    {% for playlist in playlists %}
+                    <div class="track-item" style="cursor: pointer;" onclick="abrirGestionPlaylist('{{ playlist.0 }}', '{{ playlist.1 }}')">
+                        <div class="d-flex align-items-center gap-3">
+                            <div class="p-2 rounded" style="background-color: rgba(0, 174, 239, 0.1); border: 1px solid rgba(0, 174, 239, 0.3);">
+                                <i class="bi bi-folder-fill fs-5" style="color: var(--rm-accent);"></i>
+                            </div>
+                            <div>
+                                <h6 class="mb-0 fw-bold text-white pl-name-target">{{ playlist.1 }}</h6>
+                                <small class="text-muted fw-bold">Ver y agregar canciones</small>
+                            </div>
+                        </div>
+                        <div class="text-muted"><i class="bi bi-pencil-square text-info fs-5"></i></div>
+                    </div>
+                    {% empty %}
+                    <div class="text-center py-5 text-muted">No tienes ninguna playlist guardada.</div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="col-xl-4 col-lg-7 mb-4">
+                <h3 class="section-title"><span><i class="bi bi-magic me-2" style="color: var(--rm-accent);"></i>Especialmente para ti</span></h3>
                 <div class="track-list-container">
                     {% for rec in recomendaciones %}
-                    <div class="track-item" 
-                         data-id="{% if rec.idCancion %}{{ rec.idCancion }}{% elif rec.id_cancion %}{{ rec.id_cancion }}{% else %}{{ rec.id }}{% endif %}" 
-                         data-titulo="{{ rec.Cancion }}" 
-                         data-artista="{{ rec.Artista }}">
+                    <div class="track-item" data-id="{{ rec.idCancion }}" data-titulo="{{ rec.Cancion }}" data-artista="{{ rec.Artista }}">
                         <div class="d-flex align-items-center gap-3">
                             <div class="p-2 border border-secondary rounded" style="background-color: #333;"><i class="bi bi-music-note fs-5 text-secondary"></i></div>
                             <div>
@@ -91,14 +147,11 @@
                 </div>
             </div>
 
-            <div class="col-lg-6 mb-4">
-                <h3 class="section-title"><i class="bi bi-graph-up-arrow me-2" style="color: var(--rm-accent);"></i>Lo que más escuchas</h3>
+            <div class="col-xl-4 col-lg-12 mb-4">
+                <h3 class="section-title"><span><i class="bi bi-graph-up-arrow me-2" style="color: var(--rm-accent);"></i>Lo que más escuchas</span></h3>
                 <div class="track-list-container" id="top-canciones-box">
                     {% for cancion in top_canciones %}
-                    <div class="track-item" 
-                         data-id="{% if cancion.idCancion %}{{ cancion.idCancion }}{% elif cancion.id_cancion %}{{ cancion.id_cancion }}{% else %}{{ cancion.id }}{% endif %}" 
-                         data-titulo="{{ cancion.Cancion }}" 
-                         data-artista="{{ cancion.Artista }}">
+                    <div class="track-item" data-id="{% if cancion.idCancion %}{{ cancion.idCancion }}{% elif cancion.id_cancion %}{{ cancion.id_cancion }}{% else %}{{ cancion.id }}{% endif %}" data-titulo="{{ cancion.Cancion }}" data-artista="{{ cancion.Artista }}">
                         <div class="d-flex align-items-center gap-3">
                             <div class="fw-bold fs-5 text-muted" style="width: 25px; text-align: right; margin-right: 5px;">{{ forloop.counter }}</div>
                             <div>
@@ -116,17 +169,67 @@
         </div>
     </div>
 
+    <div class="modal fade" id="modalPlaylist" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold">Nueva Playlist</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form action="{% url 'crear_playlist_usuario' %}" method="POST">
+                    {% csrf_token %}
+                    <div class="modal-body">
+                        <div class="mb-2">
+                            <label for="nombre_playlist" class="form-label fw-bold text-white">Nombre de la Playlist</label>
+                            <input type="text" class="form-control rm-input" id="nombre_playlist" name="nombre" required placeholder="Ej. Mi Mix para Programar">
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary fw-bold" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="submit" class="btn fw-bold" style="background-color: var(--rm-accent); color: white;">Crear Playlist</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="modalGestionPlaylist" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold" id="gestion-title-label">🎶 Editar Playlist</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-5 mb-3 mb-md-0">
+                            <h6 class="fw-bold mb-3 text-info"><i class="bi bi-music-note-list"></i> Pistas en la lista</h6>
+                            <div class="split-scroll-box" id="box-pistas-actuales">
+                                </div>
+                        </div>
+                        <div class="col-md-7">
+                            <h6 class="fw-bold mb-2 text-success"><i class="bi bi-plus-circle"></i> Agregar Canciones</h6>
+                            <input type="text" class="form-control rm-input mb-3 py-2 fs-6" id="search-songs-input" placeholder="Buscar canción por título..." oninput="filtrarCatalogoPlaylist()">
+                            <div class="split-scroll-box" id="box-pistas-disponibles">
+                                </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary fw-bold px-4" data-bs-dismiss="modal">Listo</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="player-bar shadow-lg">
         <div class="player-track-info">
-            <div id="player-art" style="width: 55px; height: 55px; background-color: #282828; border-radius: 4px; display: flex; align-items: center; justify-content: center; border: 1px solid #333;">
-                <i class="bi bi-disc-fill fs-3 text-secondary"></i>
-            </div>
+            <div id="player-art" style="width: 55px; height: 55px; background-color: #282828; border-radius: 4px; display: flex; align-items: center; justify-content: center; border: 1px solid #333;"><i class="bi bi-disc-fill fs-3 text-secondary"></i></div>
             <div>
                 <h6 id="player-title" class="mb-0 fw-bold text-white" style="font-size: 0.95rem;">Ninguna canción seleccionada</h6>
                 <small id="player-artist" class="text-muted fw-bold" style="font-size: 0.85rem;">Selecciona una pista para comenzar</small>
             </div>
         </div>
-
         <div class="player-controls">
             <div class="d-flex align-items-center gap-4">
                 <button class="btn-player-action"><i class="bi bi-shuffle"></i></button>
@@ -137,20 +240,11 @@
             </div>
             <div class="progress-container">
                 <span id="player-time-current">0:00</span>
-                <div class="progress-bar-bg" onclick="saltarTiempo(event)">
-                    <div class="progress-bar-active" id="player-progress-bar"></div>
-                </div>
+                <div class="progress-bar-bg" onclick="saltarTiempo(event)"><div class="progress-bar-active" id="player-progress-bar"></div></div>
                 <span id="player-time-total">0:00</span>
             </div>
         </div>
-
-        <div class="player-side-actions d-none d-md-flex">
-            <i class="bi bi-mic"></i>
-            <i class="bi bi-list-ul"></i>
-            <i class="bi bi-speaker"></i>
-            <i class="bi bi-volume-up"></i>
-            <div style="width: 90px; height: 4px; background-color: #555; border-radius: 2px; position:relative;"><div style="width: 70%; height:100%; background-color:#fff; border-radius:2px;"></div></div>
-        </div>
+        <div class="player-side-actions d-none d-md-flex"><i class="bi bi-volume-up"></i><div style="width: 90px; height: 4px; background-color: #555; border-radius: 2px; position:relative;"><div style="width: 70%; height:100%; background-color:#fff; border-radius:2px;"></div></div></div>
     </div>
 
     <script>
@@ -160,157 +254,150 @@
         let tiempoTranscurrido = 0;
         let duracionTotal = 0;
         let estaReproduciendo = false;
+        let playlistActivaID = null;
 
-        // MEJORA: Construcción de Cola Unificada leyendo ambas columnas de la interfaz
+        // AUTO-OPEN: Si se acaba de crear una playlist, se dispara su editor al cargar la página
+        document.addEventListener("DOMContentLoaded", function() {
+            mapearCola();
+            
+            // CORRECCIÓN AQUÍ: Se cambió 'default_none' por 'default_if_none'
+            const autoOpenID = "{{ auto_open_playlist_id|default_if_none:'' }}";
+            
+            if(autoOpenID && autoOpenID !== "None" && autoOpenID !== "") {
+                abrirGestionPlaylist(autoOpenID, "Tu Nueva Lista");
+            }
+        });
+
+        // FUNCIÓN CORE: Carga asíncrona (AJAX) del Split-View interno del Modal
+        function abrirGestionPlaylist(id_playlist, nombre_playlist) {
+            playlistActivaID = id_playlist;
+            document.getElementById("gestion-title-label").innerHTML = `📁 Gestionar Playlist: <span class="text-info">${nombre_playlist}</span>`;
+            document.getElementById("search-songs-input").value = "";
+            
+            fetch(`/playlist/detalles/${id_playlist}/`)
+                .then(res => res.json())
+                .then(data => {
+                    if(data.status === 'success') {
+                        // A. Renderizar canciones actuales (Izquierda)
+                        const containerActuales = document.getElementById("box-pistas-actuales");
+                        containerActuales.innerHTML = "";
+                        if(data.guardadas.length === 0) {
+                            containerActuales.innerHTML = `<div class="text-center py-4 text-muted small">Lista vacía.<br>Agrega pistas desde el panel derecho.</div>`;
+                        } else {
+                            data.guardadas.forEach(pista => {
+                                containerActuales.innerHTML += `
+                                    <div class="p-2 mb-1 border-bottom border-secondary d-flex justify-content-between align-items-center">
+                                        <span class="small fw-bold text-white"><i class="bi bi-music-note text-info me-2"></i>${pista.titulo}</span>
+                                    </div>`;
+                            });
+                        }
+
+                        // B. Renderizar catálogo global para adición (Derecha)
+                        const containerDisponibles = document.getElementById("box-pistas-disponibles");
+                        containerDisponibles.innerHTML = "";
+                        data.disponibles.forEach(pista => {
+                            containerDisponibles.innerHTML += `
+                                <div class="p-2 mb-1 border-bottom border-secondary d-flex justify-content-between align-items-center discrete-song-row" data-search-title="${pista.titulo.toLowerCase()}">
+                                    <span class="small text-white-50">${pista.titulo}</span>
+                                    <button class="btn btn-sm btn-info py-0 px-2 fw-bold text-white" onclick="inyectarCancionAPlaylist(${pista.id})"><i class="bi bi-plus-lg"></i></button>
+                                </div>`;
+                        });
+
+                        // Desplegar ventana modal de forma limpia
+                        const myModal = new bootstrap.Modal(document.getElementById('modalGestionPlaylist'));
+                        myModal.show();
+                    } else {
+                        mostrarError(data.message);
+                    }
+                }).catch(() => mostrarError("Imposible procesar los metadatos de la playlist."));
+        }
+
+        // ACCIÓN ASÍNCRONA (+): Agrega pista a la tabla relacional sin parpadear la pantalla
+        function inyectarCancionAPlaylist(id_cancion) {
+            if(!playlistActivaID) return;
+            fetch(`/playlist/agregar/${playlistActivaID}/${id_cancion}/`)
+                .then(res => res.json())
+                .then(data => {
+                    if(data.status === 'success') {
+                        // Re-renderizado veloz en segundo plano para dar feedback inmediato (Don Norman)
+                        fetch(`/playlist/detalles/${playlistActivaID}/`)
+                            .then(r => r.json())
+                            .then(freshData => {
+                                const containerActuales = document.getElementById("box-pistas-actuales");
+                                containerActuales.innerHTML = "";
+                                freshData.guardadas.forEach(pista => {
+                                    containerActuales.innerHTML += `
+                                        <div class="p-2 mb-1 border-bottom border-secondary d-flex justify-content-between align-items-center">
+                                            <span class="small fw-bold text-white"><i class="bi bi-music-note text-info me-2"></i>${pista.titulo}</span>
+                                        </div>`;
+                                });
+                            });
+                    } else {
+                        alert(`Restricción: ${data.message}`);
+                    }
+                });
+        }
+
+        // BUSCADOR EN TIEMPO REAL (Filtro del lado derecho)
+        function filtrarCatalogoPlaylist() {
+            const lookUp = document.getElementById("search-songs-input").value.toLowerCase();
+            document.querySelectorAll(".discrete-song-row").forEach(row => {
+                const title = row.getAttribute("data-search-title");
+                row.style.display = title.includes(lookUp) ? "flex" : "none";
+            });
+        }
+
+        // --- SISTEMA DEL REPRODUCTOR (Se mantiene estable) ---
         function mapearCola() {
             colaReproduccion = [];
             document.querySelectorAll(".track-item[data-id]").forEach(item => {
                 const idTrack = item.getAttribute("data-id");
                 if(idTrack && idTrack !== "None" && idTrack !== "") {
-                    // Evitar duplicados exactos seguidos en la cola de reproducción
                     if(!colaReproduccion.some(t => t.id === idTrack)) {
-                        colaReproduccion.push({
-                            id: idTrack,
-                            titulo: item.getAttribute("data-titulo"),
-                            artista: item.getAttribute("data-artista")
-                        });
+                        colaReproduccion.push({ id: idTrack, titulo: item.getAttribute("data-titulo"), artista: item.getAttribute("data-artista") });
                     }
                 }
             });
         }
-
-        document.addEventListener("DOMContentLoaded", function() {
-            mapearCola();
-        });
-
         function reproducirDesdeInterfaz(elemento) {
             const trackItem = elemento.closest(".track-item");
             const id = trackItem.getAttribute("data-id");
-            if (!id || id === "None" || id === "") {
-                mostrarError("La canción seleccionada no cuenta con un identificador válido.");
-                return;
-            }
-            
-            // Re-mapear por si hubo algún cambio dinámico
             mapearCola();
             indiceActual = colaReproduccion.findIndex(t => t.id === id);
-            
-            if(indiceActual !== -1) {
-                cargarYReproducirPista(colaReproduccion[indiceActual]);
-            }
+            if(indiceActual !== -1) { cargarYReproducirPista(colaReproduccion[indiceActual]); }
         }
-
         function cargarYReproducirPista(pista) {
             if (!pista) return;
-            
             fetch(`/cancion/reproducir/${pista.id}/`)
-                .then(res => {
-                    if (!res.ok) return res.text().then(text => { throw new Error(text) });
-                    return res.json();
-                })
+                .then(res => res.json())
                 .then(data => {
                     if (data.status === 'success') {
-                        // El contador ya no se incrementa visualmente a la derecha. 
-                        // El re-posicionamiento se calculará nativamente desde SQL Server al refrescar (F5).
                         document.getElementById("player-title").innerText = data.titulo;
                         document.getElementById("player-artist").innerText = pista.artista;
                         duracionTotal = data.duracion;
                         document.getElementById("player-time-total").innerText = formatearTiempo(duracionTotal);
-                        
-                        reiniciarCronometro();
-                        iniciarCronometro();
-                    } else {
-                        mostrarError(data.message);
+                        reiniciarCronometro(); iniciarCronometro();
                     }
-                })
-                .catch(err => {
-                    mostrarError(`Error de comunicación con la base de datos: ${err.message}`);
                 });
         }
-
         function conmutarReproduccion() {
-            if (indiceActual === -1 && colaReproduccion.length > 0) {
-                indiceActual = 0;
-                cargarYReproducirPista(colaReproduccion[indiceActual]);
-                return;
-            }
-            if (indiceActual === -1) return;
-
-            if (estaReproduciendo) {
-                pausarCronometro();
-            } else {
-                iniciarCronometro();
-            }
+            if (indiceActual === -1 && colaReproduccion.length > 0) { indiceActual = 0; cargarYReproducirPista(colaReproduccion[indiceActual]); return; }
+            if (estaReproduciendo) { pausarCronometro(); } else { iniciarCronometro(); }
         }
-
         function iniciarCronometro() {
-            estaReproduciendo = true;
-            document.getElementById("player-trigger").innerHTML = '<i class="bi bi-pause-circle-fill"></i>';
-            reproductorIntervalo = setInterval(() => {
-                tiempoTranscurrido++;
-                if (tiempoTranscurrido > duracionTotal) {
-                    pistaSiguiente();
-                } else {
-                    actualizarVisualizacionTiempo();
-                }
-            }, 1000);
+            estaReproduciendo = true; document.getElementById("player-trigger").innerHTML = '<i class="bi bi-pause-circle-fill"></i>';
+            reproductorIntervalo = setInterval(() => { tiempoTranscurrido++; if (tiempoTranscurrido > duracionTotal) { pistaSiguiente(); } else { actualizarVisualizacionTiempo(); } }, 1000);
         }
-
-        function pausarCronometro() {
-            estaReproduciendo = false;
-            document.getElementById("player-trigger").innerHTML = '<i class="bi bi-play-circle-fill"></i>';
-            clearInterval(reproductorIntervalo);
-        }
-
-        function reiniciarCronometro() {
-            clearInterval(reproductorIntervalo);
-            tiempoTranscurrido = 0;
-            actualizarVisualizacionTiempo();
-        }
-
-        function actualizarVisualizacionTiempo() {
-            document.getElementById("player-time-current").innerText = formatearTiempo(tiempoTranscurrido);
-            const porcentaje = (tiempoTranscurrido / duracionTotal) * 100;
-            document.getElementById("player-progress-bar").style.width = `${porcentaje}%`;
-        }
-
-        function pistaSiguiente() {
-            if (colaReproduccion.length === 0) return;
-            indiceActual = (indiceActual + 1) % colaReproduccion.length;
-            cargarYReproducirPista(colaReproduccion[indiceActual]);
-        }
-
-        function pistaAnterior() {
-            if (colaReproduccion.length === 0) return;
-            indiceActual = (indiceActual - 1 + colaReproduccion.length) % colaReproduccion.length;
-            cargarYReproducirPista(colaReproduccion[indiceActual]);
-        }
-
-        function saltarTiempo(event) {
-            if (duracionTotal === 0) return;
-            const caja = event.currentTarget;
-            const clickX = event.offsetX;
-            const anchoTotal = caja.clientWidth;
-            const porcentaje = clickX / anchoTotal;
-            tiempoTranscurrido = Math.floor(porcentaje * duracionTotal);
-            actualizarVisualizacionTiempo();
-        }
-
-        function formatearTiempo(segundos) {
-            const min = Math.floor(segundos / 60);
-            const seg = segundos % 60;
-            return `${min}:${seg < 10 ? '0' : ''}${seg}`;
-        }
-
+        function pausarCronometro() { estaReproduciendo = false; document.getElementById("player-trigger").innerHTML = '<i class="bi bi-play-circle-fill"></i>'; clearInterval(reproductorIntervalo); }
+        function reiniciarCronometro() { clearInterval(reproductorIntervalo); tiempoTranscurrido = 0; actualizarVisualizacionTiempo(); }
+        function actualizarVisualizacionTiempo() { document.getElementById("player-time-current").innerText = formatearTiempo(tiempoTranscurrido); document.getElementById("player-progress-bar").style.width = `${(tiempoTranscurrido / duracionTotal) * 100}%`; }
+        function pistaSiguiente() { if (colaReproduccion.length === 0) return; indiceActual = (indiceActual + 1) % colaReproduccion.length; cargarYReproducirPista(colaReproduccion[indiceActual]); }
+        function pistaAnterior() { if (colaReproduccion.length === 0) return; indiceActual = (indiceActual - 1 + colaReproduccion.length) % colaReproduccion.length; cargarYReproducirPista(colaReproduccion[indiceActual]); }
+        function saltarTiempo(event) { if (duracionTotal === 0) return; tiempoTranscurrido = Math.floor((event.offsetX / event.currentTarget.clientWidth) * duracionTotal); actualizarVisualizacionTiempo(); }
+        function formatearTiempo(segundos) { const min = Math.floor(segundos / 60); const seg = segundos % 60; return `${min}:${seg < 10 ? '0' : ''}${seg}`; }
         function mostrarError(msg) {
             const alertBox = document.getElementById("alert-container");
-            alertBox.innerHTML = `
-                <div class="alert alert-danger bg-danger text-white border-0 alert-dismissible fade show fw-bold" role="alert">
-                    <i class="bi bi-exclamation-triangle-fill me-2"></i> ${msg}
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="alert" aria-label="Close"></button>
-                </div>
-            `;
-            window.scrollTo({ top: 0, behavior: 'smooth' });
+            alertBox.innerHTML = `<div class="alert alert-danger bg-danger text-white border-0 alert-dismissible fade show fw-bold" role="alert"><i class="bi bi-exclamation-triangle-fill me-2"></i> ${msg}<button type="button" class="btn-close btn-close-white" data-bs-alert="close" data-bs-dismiss="alert"></button></div>`;
         }
     </script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
