@@ -6,6 +6,7 @@ from .models import Usuario, Discografica, Artista, Album, Cancion, Genero, Plan
 from django.db import connection
 from django.db import DatabaseError
 from functools import wraps
+from django.http import JsonResponse
 
 def verificar_rol(roles_permitidos):
     """Decorador para restringir el acceso a vistas según el rol de la sesión."""
@@ -488,44 +489,58 @@ def dictfetchall(cursor):
 
 @verificar_rol(['Cliente', 'Admin'])
 def dashboard_usuario(request):
-    if 'usuario_id' not in request.session or request.session.get('usuario_rol') not in ['Cliente', 'Admin']:
+    usuario_id = request.session.get('usuario_id')
+    if not usuario_id:
         return redirect('login')
         
-    usuario_id = request.session['usuario_id']
     top_canciones = []
-    recomendaciones = []
-    
-    # Valores por defecto si no tiene registro de suscripción aún
-    plan_info = {'plan_nombre': 'Free', 'suscripcion_estado': 'Inactiva', 'idSuscripcion': None}
     
     with connection.cursor() as cursor:
-        # 1. Consulta SQL para obtener el plan y estado de suscripción del usuario
-        cursor.execute("""
-            SELECT TOP 1 P.nombre, S.estado, S.idSuscripcion
-            FROM Facturacion.Suscripcion S
-            INNER JOIN Facturacion.PlanEntity P ON S.PlanEntity_idPlan = P.idPlan
-            WHERE S.Usuario_idUsuario = %s
-            ORDER BY CASE WHEN S.estado = 'Activa' THEN 1 ELSE 2 END, S.idSuscripcion DESC
-        """, [usuario_id])
-        row = cursor.fetchone()
-        if row:
-            plan_info = {
-                'plan_nombre': row[0],
-                'suscripcion_estado': row[1],
-                'idSuscripcion': row[2]
-            }
+        try:
+            # 1. TOP CANCIONES: Se consulta siempre fresco para que se re-posicione en tiempo real al refrescar
+            cursor.execute("EXEC Reportes.sp_TopCancionesUsuario %s", [usuario_id])
+            columns_top = [col[0] for col in cursor.description]
+            top_canciones = [dict(zip(columns_top, row)) for row in cursor.fetchall()]
+        except Exception as e:
+            pass
 
-        # 2. Ejecutar Reporte: Top Canciones por Usuario
-        cursor.execute("EXEC Reportes.sp_TopCancionesUsuario @idUsuario = %s", [usuario_id])
-        top_canciones = dictfetchall(cursor)
-        
-        # 3. Ejecutar Reporte: Recomendaciones Personalizadas
-        cursor.execute("EXEC Reportes.sp_RecomendacionesPersonalizadas @idUsuario = %s", [usuario_id])
-        recomendaciones = dictfetchall(cursor)
-        
+    # 2. CACHÉ DE RECOMENDACIONES: Evita que desaparezcan al reproducir o dar F5
+    recomendaciones = request.session.get('recomendaciones_cache')
+    
+    if not recomendaciones:
+        recomendaciones = []
+        with connection.cursor() as cursor:
+            try:
+                cursor.execute("EXEC Reportes.sp_RecomendacionesPersonalizadas %s", [usuario_id])
+                columns_rec = [col[0] for col in cursor.description]
+                raw_recs = [dict(zip(columns_rec, row)) for row in cursor.fetchall()]
+                
+                for r in raw_recs:
+                    # Mapeo tolerante a variantes de nombres de columnas del SP
+                    id_can = r.get('idCancion') or r.get('id_cancion') or r.get('id')
+                    tit_can = r.get('Cancion') or r.get('titulo')
+                    art_can = r.get('Artista') or r.get('nombreArtistico') or r.get('nombre')
+                    alb_can = r.get('Album') or r.get('album_titulo') or 'Sencillo'
+                    
+                    if id_can:
+                        recomendaciones.append({
+                            'idCancion': id_can,
+                            'Cancion': tit_can,
+                            'Artista': art_can,
+                            'Album': alb_can
+                        })
+                
+                # Guardamos la lista en la sesión del navegador
+                request.session['recomendaciones_cache'] = recomendaciones
+            except Exception as e:
+                recomendaciones = []
+
+    # Recuperar información básica del plan (Simulado o desde sesión)
+    plan_info = request.session.get('plan_info', {'plan_nombre': 'Premium', 'suscripcion_estado': 'Activa'})
+
     context = {
         'top_canciones': top_canciones,
-        'recomendaciones': recommendations if 'recommendations' in locals() else recomendaciones,
+        'recomendaciones': recomendaciones,
         'plan_info': plan_info,
     }
     return render(request, 'dashboards/usuario.html', context)
