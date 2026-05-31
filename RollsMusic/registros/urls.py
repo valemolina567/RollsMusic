@@ -56,6 +56,8 @@ urlpatterns = [
     path('dashboard/usuario/', views.dashboard_usuario, name='dashboard_usuario'),
     path('dashboard/usuario/pagar/', views.procesar_pago, name='procesar_pago'),
     path('dashboard/artista/', views.dashboard_artista, name='dashboard_artista'),
+    path('dashboard/artista/nuevo-album/', views.crear_album_artista, name='crear_album_artista'), 
+    path('dashboard/artista/nueva-cancion/', views.subir_cancion_artista, name='subir_cancion_artista'),
     
     # TRIGGER DE REPRODUCCIONES
     path('cancion/reproducir/<int:id_cancion>/', views.registrar_reproduccion, name='registrar_reproduccion'),

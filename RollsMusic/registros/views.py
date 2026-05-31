@@ -532,43 +532,88 @@ def dashboard_usuario(request):
 
 @verificar_rol(['Artista', 'Admin'])
 def dashboard_artista(request):
-    if 'usuario_id' not in request.session or request.session.get('usuario_rol') not in ['Artista', 'Admin']:
+    usuario_id = request.session.get('usuario_id')
+    if not usuario_id:
         return redirect('login')
-    
-    usuario_nombre = request.session.get('usuario_nombre').split()[0]
-    
-    # NOTA TÉCNICA: Como en su BD no hay una FK directa de Usuario -> Artista para saber 
-    # qué perfil le pertenece, buscaremos una coincidencia por nombre o cargaremos el primer artista a modo de Demo.
-    artista = Artista.objects.filter(nombreArtistico__icontains=usuario_nombre).first()
-    if not artista:
-        artista = Artista.objects.first()
-
+        
+    artista = None
     total_regalias = 0
     minutos_cancion_demo = 0
     canciones_artista = []
-
-    if artista:
-        canciones_artista = Cancion.objects.filter(Album_idAlbum__Artista_idArtista=artista.idArtista)
-        cancion_demo_id = canciones_artista.first().idCancion if canciones_artista.exists() else None
-
-        # IMPLEMENTACIÓN DE FUNCIONES ESCALARES
-        with connection.cursor() as cursor:
-            # 1. Función Escalar: Total de regalías generadas por el artista
-            cursor.execute("SELECT Facturacion.fn_TotalRegaliaArtista(%s)", [artista.idArtista])
-            row = cursor.fetchone()
-            total_regalias = row[0] if row and row[0] else 0
+    albums_artista = []
+    
+    with connection.cursor() as cursor:
+        try:
+            # 1. INSPECCIÓN EN TIEMPO REAL: Columnas de Catalogo.Artista
+            cursor.execute("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'Catalogo' AND TABLE_NAME = 'Artista'")
+            art_cols = [row[0] for row in cursor.fetchall()]
+            col_art_nombre = 'nombreArtistico' if 'nombreArtistico' in art_cols else ('nombre_artistico' if 'nombre_artistico' in art_cols else 'nombre')
+            col_art_usuario = 'Usuario_idUsuario' if 'Usuario_idUsuario' in art_cols else ('idUsuario' if 'idUsuario' in art_cols else ('Usuario_id' if 'Usuario_id' in art_cols else 'idArtista'))
             
-            # 2. Función Escalar: Minutos Reproducidos (usando la pista principal del artista)
-            if cancion_demo_id:
-                cursor.execute("SELECT Usuarios.fn_MinutosReproduccionCancion(%s)", [cancion_demo_id])
-                row2 = cursor.fetchone()
-                minutos_cancion_demo = row2[0] if row2 and row2[0] else 0
+            # 2. INSPECCIÓN EN TIEMPO REAL: Columnas de Catalogo.Album
+            cursor.execute("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'Catalogo' AND TABLE_NAME = 'Album'")
+            alb_cols = [row[0] for row in cursor.fetchall()]
+            col_alb_artista = 'Artista_idArtista' if 'Artista_idArtista' in alb_cols else ('idArtista' if 'idArtista' in alb_cols else 'Artista_id')
+            
+            # 3. INSPECCIÓN EN TIEMPO REAL: Columnas de Catalogo.Cancion
+            cursor.execute("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'Catalogo' AND TABLE_NAME = 'Cancion'")
+            can_cols = [row[0] for row in cursor.fetchall()]
+            col_can_album = 'Album_idAlbum' if 'Album_idAlbum' in can_cols else ('idAlbum' if 'idAlbum' in can_cols else 'Album_id')
+
+            # --- EJECUCIÓN CON COLUMNAS MAPEADAS ---
+            query_artista = f"SELECT idArtista, {col_art_nombre} FROM Catalogo.Artista WHERE {col_art_usuario} = %s"
+            cursor.execute(query_artista, [usuario_id])
+            artista_row = cursor.fetchone()
+            
+            if artista_row:
+                id_artista = artista_row[0]
+                artista = {'idArtista': id_artista, 'nombreArtistico': artista_row[1]}
+                
+                # Métrica: Total de Regalías
+                cursor.execute("SELECT Facturacion.fn_TotalRegaliaArtista(%s)", [id_artista])
+                regalias_row = cursor.fetchone()
+                total_regalias = regalias_row[0] if regalias_row and regalias_row[0] is not None else 0
+                
+                # Métrica: Minutos reproducidos pista TOP
+                cursor.execute(f"""
+                    SELECT TOP 1 Usuarios.fn_MinutosReproduccionCancion(idCancion)
+                    FROM Catalogo.Cancion 
+                    WHERE {col_can_album} IN (SELECT idAlbum FROM Catalogo.Album WHERE {col_alb_artista} = %s)
+                """, [id_artista])
+                minutos_row = cursor.fetchone()
+                minutos_cancion_demo = minutos_row[0] if minutos_row and minutos_row[0] is not None else 0
+                
+                # Obtener catálogo de canciones
+                cursor.execute(f"""
+                    SELECT C.titulo, C.duracion, C.calidadAudio, A.titulo AS album_titulo 
+                    FROM Catalogo.Cancion C
+                    INNER JOIN Catalogo.Album A ON C.{col_can_album} = A.idAlbum
+                    WHERE A.{col_alb_artista} = %s
+                """, [id_artista])
+                raw_canciones = cursor.fetchall()
+                
+                canciones_artista = [
+                    {
+                        'titulo': r[0],
+                        'duracion': r[1],
+                        'calidadAudio': r[2],
+                        'Album_idAlbum': {'titulo': r[3]}
+                    } for r in raw_canciones
+                ]
+                
+                # Obtener álbumes para el dropdown del Modal
+                cursor.execute(f"SELECT idAlbum, titulo FROM Catalogo.Album WHERE {col_alb_artista} = %s", [id_artista])
+                albums_artista = cursor.fetchall()
+                
+        except Exception as e:
+            messages.error(request, f"Error al interactuar con la Base de Datos: {str(e)}")
 
     context = {
         'artista': artista,
         'total_regalias': total_regalias,
-        'canciones_artista': canciones_artista,
         'minutos_cancion_demo': minutos_cancion_demo,
+        'canciones_artista': canciones_artista,
+        'albums_artista': albums_artista,
     }
     return render(request, 'dashboards/artista.html', context)
 
@@ -640,18 +685,17 @@ def registrar_reproduccion(request, id_cancion):
     
     with connection.cursor() as cursor:
         try:
-            # 1. Obtener la duración de la canción para simular que se escuchó completa
+            # 1. Obtener datos de la canción para retornar al reproductor
             cursor.execute("SELECT duracion, titulo FROM Catalogo.Cancion WHERE idCancion = %s", [id_cancion])
             cancion = cursor.fetchone()
             
             if not cancion:
-                messages.error(request, "La canción seleccionada no existe.")
-                return redirect('dashboard_usuario')
+                return JsonResponse({'status': 'error', 'message': 'La canción no existe.'}, status=404)
                 
             duracion_segundos = cancion[0]
             titulo_cancion = cancion[1]
 
-            # 2. Inserción con los nombres de la tabla en SQL Server
+            # 2. Inserción en la base de datos (Ejecuta tu Trigger automáticamente)
             cursor.execute("""
                 INSERT INTO Usuarios.Reproduccion 
                 (fechaHora, dispositivo, pais, duracionEscuchada, completada, Usuario_idUsuario, Cancion_idCancion)
@@ -659,15 +703,96 @@ def registrar_reproduccion(request, id_cancion):
                 (GETDATE(), 'Navegador Web', 'Ecuador', %s, 1, %s, %s)
             """, [duracion_segundos, usuario_id, id_cancion])
             
-            messages.success(request, f"▶️ Reproduciendo ahora: '{titulo_cancion}'. ¡Historial y métricas actualizados!")
+            # RETORNO JSON: Django responde en segundo plano con los metadatos de la pista
+            return JsonResponse({
+                'status': 'success',
+                'idCancion': id_cancion,
+                'titulo': titulo_cancion,
+                'duracion': duracion_segundos
+            })
             
         except DatabaseError as db_err:
-            # Si el Trigger trg_ValidarReproduccion lanza un RAISERROR, caerá aquí
-            messages.error(request, f"La base de datos rechazó la reproducción: {str(db_err)}")
+            return JsonResponse({'status': 'error', 'message': f'Filtro de BD: {str(db_err)}'}, status=400)
         except Exception as e:
-            messages.error(request, f"Error en el sistema: {str(e)}")
-            
-    return redirect('dashboard_usuario')
+            return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+
+@verificar_rol(['Artista', 'Admin'])
+def crear_album_artista(request):
+    if request.method == 'POST':
+        titulo = request.POST.get('titulo', '').strip()
+        fecha_lanzamiento = request.POST.get('fecha_lanzamiento', '').strip()
+        usuario_id = request.session['usuario_id']
+        
+        with connection.cursor() as cursor:
+            try:
+                # Resolver columnas dinámicamente para el insert
+                cursor.execute("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'Catalogo' AND TABLE_NAME = 'Artista'")
+                art_cols = [row[0] for row in cursor.fetchall()]
+                col_art_usuario = 'Usuario_idUsuario' if 'Usuario_idUsuario' in art_cols else ('idUsuario' if 'idUsuario' in art_cols else ('Usuario_id' if 'Usuario_id' in art_cols else 'idArtista'))
+                
+                cursor.execute("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'Catalogo' AND TABLE_NAME = 'Album'")
+                alb_cols = [row[0] for row in cursor.fetchall()]
+                col_alb_artista = 'Artista_idArtista' if 'Artista_idArtista' in alb_cols else ('idArtista' if 'idArtista' in alb_cols else 'Artista_id')
+
+                cursor.execute(f"SELECT idArtista FROM Catalogo.Artista WHERE {col_art_usuario} = %s", [usuario_id])
+                artista_row = cursor.fetchone()
+                
+                if artista_row:
+                    id_artista = artista_row[0]
+                    cursor.execute(f"""
+                        INSERT INTO Catalogo.Album (titulo, fechaLanzamiento, imagen, {col_alb_artista})
+                        VALUES (%s, %s, 'album_default.png', %s)
+                    """, [titulo, fecha_lanzamiento, id_artista])
+                    messages.success(request, f"💿 El álbum '{titulo}' ha sido creado correctamente.")
+            except Exception as e:
+                messages.error(request, f"Error al crear álbum: {str(e)}")
+                
+    return redirect('dashboard_artista')
+
+
+@verificar_rol(['Artista', 'Admin'])
+def subir_cancion_artista(request):
+    if request.method == 'POST':
+        titulo = request.POST.get('titulo', '').strip()
+        duracion = request.POST.get('duracion', '').strip()
+        calidad = request.POST.get('calidadAudio', 'Alta')
+        album_id = request.POST.get('album_id')
+        
+        with connection.cursor() as cursor:
+            try:
+                # 1. Resolver columna de relación en Canción de forma dinámica
+                cursor.execute("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'Catalogo' AND TABLE_NAME = 'Cancion'")
+                can_cols = [row[0] for row in cursor.fetchall()]
+                col_can_album = 'Album_idAlbum' if 'Album_idAlbum' in can_cols else ('idAlbum' if 'idAlbum' in can_cols else 'Album_id')
+
+                # 2. CALCULAR NÚMERO DE PISTA AUTOMÁTICAMENTE
+                cursor.execute(f"SELECT COUNT(*) FROM Catalogo.Cancion WHERE {col_can_album} = %s", [album_id])
+                count_row = cursor.fetchone()
+                numero_pista = (count_row[0] + 1) if count_row else 1
+
+                # 3. HEREDAR LA FECHA DE LANZAMIENTO DEL ÁLBUM
+                cursor.execute("SELECT fechaLanzamiento FROM Catalogo.Album WHERE idAlbum = %s", [album_id])
+                album_row = cursor.fetchone()
+                
+                # 4. INSERT FINAL CORREGIDO: Se añade 'imagen', 'numeroPista' y 'fechaLanzamiento'
+                if album_row and album_row[0]:
+                    fecha_lanzamiento = album_row[0]
+                    cursor.execute(f"""
+                        INSERT INTO Catalogo.Cancion (titulo, duracion, calidadAudio, imagen, numeroPista, fechaLanzamiento, {col_can_album})
+                        VALUES (%s, %s, %s, 'track_default.png', %s, %s, %s)
+                    """, [titulo, duracion, calidad, numero_pista, fecha_lanzamiento, album_id])
+                else:
+                    # Plan B: Si el álbum no tiene fecha por algún motivo, usamos la fecha de hoy mediante SQL
+                    cursor.execute(f"""
+                        INSERT INTO Catalogo.Cancion (titulo, duracion, calidadAudio, imagen, numeroPista, fechaLanzamiento, {col_can_album})
+                        VALUES (%s, %s, %s, 'track_default.png', %s, GETDATE(), %s)
+                    """, [titulo, duracion, calidad, numero_pista, album_id])
+                
+                messages.success(request, f"🎵 La canción '{titulo}' se ha subido como la pista N° {numero_pista} del álbum.")
+            except Exception as e:
+                messages.error(request, f"Error al subir canción: {str(e)}")
+                
+    return redirect('dashboard_artista')
 
 
 def logout_view(request):
