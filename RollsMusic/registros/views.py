@@ -402,14 +402,16 @@ def editar_usuario(request, id):
 @verificar_rol(['Admin'])
 def eliminar_usuario(request, id):
     usuario = get_object_or_404(Usuario, idUsuario=id)
-    if request.method == 'POST':
-        try:
-            usuario.delete()
-            messages.success(request, "Usuario eliminado correctamente de la plataforma.")
-        except Exception as e:
-            # Si SQL Server frena el borrado por una restricción severa, te avisará en pantalla
-            messages.error(request, f"No se pudo eliminar el usuario debido a dependencias activas en la base de datos.")
-        return redirect('listar_usuarios')
+    # Quitamos el "if request.method == 'POST'" para que acepte el viaje directo de SweetAlert2
+    try:
+        usuario.delete()
+        messages.success(request, "Usuario eliminado correctamente de la plataforma.")
+    except Exception as e:
+        # SQL Server frenará el borrado si el usuario tiene playlists, reproducciones, etc.
+        messages.error(request, "No se pudo eliminar el usuario debido a dependencias activas en la base de datos.")
+    
+    # Este return ahora sí se ejecuta siempre, sin importar si es GET o POST
+    return redirect('listar_usuarios')
     
 # ==========================================
 # SISTEMA DE AUTENTICACIÓN (LOGIN / LOGOUT)

@@ -94,9 +94,12 @@
                                     </a>
                                     <form action="{% url 'eliminar_usuario' usuario.idUsuario %}" method="POST" onsubmit="return confirm('¿Seguro que deseas eliminar permanentemente a este usuario?');">
                                         {% csrf_token %}
-                                        <button type="submit" class="btn btn-outline-danger btn-sm">
-                                            <i class="bi bi-trash3-fill"></i> Eliminar
-                                        </button>
+                                        <button type="button" 
+                                        class="btn btn-danger btn-sm btn-eliminar-usuario" 
+                                        data-url="{% url 'eliminar_usuario' usuario.idUsuario %}"
+                                        data-nombre="{{ usuario.nombre }} {{ usuario.apellido }}">
+                                        <i class="bi bi-trash-fill"></i> Eliminar
+</button>
                                     </form>
                                 </div>
                             </td>
@@ -111,5 +114,31 @@
             </div>
         </div>
     </div>
-</body>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script>
+    document.querySelectorAll('.btn-eliminar-usuario').forEach(boton => {
+        boton.addEventListener('click', function(e) {
+            const urlEliminar = this.getAttribute('data-url');
+            const nombreUsuario = this.getAttribute('data-nombre');
+            Swal.fire({
+                title: '¿Estás seguro?',
+                text: `Vas a eliminar permanentemente al usuario: ${nombreUsuario}`,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#00AEEF', // El color azul acento de RollsMusic
+                cancelButtonColor: '#d33',
+                confirmButtonText: 'Sí, eliminar',
+                cancelButtonText: 'Cancelar',
+                background: '#1E1E1E', // Fondo oscuro que combina con tu interfaz
+                color: '#FFFFFF'       // Texto blanco
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        // Si confirma, redirige a la ruta de Django para eliminar
+                        window.location.href = urlEliminar;
+                    }
+                });
+            });
+        });
+        </script>
+    </body>
 </html>
