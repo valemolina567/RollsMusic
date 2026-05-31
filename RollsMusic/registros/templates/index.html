@@ -70,7 +70,6 @@
                         <a href="{% url 'listar_planes' %}" class="list-group-item text-decoration-none d-flex align-items-center"><i class="bi bi-credit-card-2-front-fill module-icon"></i> Módulo de Planes</a>
                     </div>
                 </div>
-
                 <div class="col-lg-5">
                     <div class="section-header">Mantenimiento Crítico de Base de Datos</div>
                     <div class="danger-zone">
@@ -81,13 +80,54 @@
                         <p class="text-muted fw-bold" style="font-size: 0.9rem; margin-bottom: 20px;">
                             Esta acción ejecutará el cursor <code>Facturacion.sp_VerificarSuscripcionesVencidas</code>. Se revisarán todas las suscripciones activas y se cambiarán a estado "Vencida" aquellas cuya fecha límite haya expirado.
                         </p>
-                        <a href="{% url 'verificar_suscripciones' %}" class="btn btn-rm-danger fw-bold text-decoration-none d-block text-center" onclick="return confirm('ATENCIÓN: Se procesarán todas las suscripciones activas en la Base de Datos para verificar su vigencia. Esta acción no se puede deshacer fácilmente. ¿Deseas continuar?');">
+                        <button type="button" 
+                            id="btn-ejecutar-mantenimiento"
+                            class="btn btn-rm-danger fw-bold w-100 text-center"
+                            data-url="{% url 'verificar_suscripciones' %}">
                             Ejecutar Mantenimiento de Suscripciones
-                        </a>
+                        </button>
                     </div>
                 </div>
             </div>
         </div>
     </div>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script>
+    document.getElementById('btn-ejecutar-mantenimiento').addEventListener('click', function() {
+        const urlMantenimiento = this.getAttribute('data-url');
+        Swal.fire({
+            title: '⚠️ ¡ATENCIÓN CRÍTICA!',
+            html: `Se procesarán todas las suscripciones activas en la Base de Datos para verificar su vigencia.<br><br>
+                <span style="color: #ff6b6b; font-weight: bold;">Esta acción modificará estados de facturación de forma masiva y no se puede deshacer fácilmente.</span><br><br>
+                ¿Deseas continuar?`,
+            icon: 'error', // Icono de error/peligro en rojo
+            showCancelButton: true,
+            confirmButtonColor: '#dc3545', // Rojo peligro de Bootstrap
+            cancelButtonColor: '#6c757d',  // Gris secundario
+            confirmButtonText: 'Sí, ejecutar procedimiento',
+            cancelButtonText: 'Cancelar',
+            background: '#1E1E1E', // Tu fondo oscuro personalizado
+            color: '#FFFFFF',       // Texto blanco
+            focusCancel: true       // Pone el foco por defecto en "Cancelar" para evitar ejecuciones accidentales con el teclado
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    // Muestra un loader estético mientras SQL Server procesa el SP
+                    Swal.fire({
+                    title: 'Procesando Base de Datos...',
+                    text: 'Ejecutando sp_VerificarSuscripcionesVencidas, por favor espera.',
+                    background: '#1E1E1E',
+                    color: '#FFFFFF',
+                    allowOutsideClick: false,
+                    didOpen: () => {
+                        Swal.showLoading();
+                    }
+                });
+            
+                // Redirige finalmente a la ejecución en Django
+                window.location.href = urlMantenimiento;
+            }
+        });
+    });
+    </script>
 </body>
 </html>
