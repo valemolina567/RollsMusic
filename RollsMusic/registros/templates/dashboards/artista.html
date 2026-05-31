@@ -15,8 +15,7 @@
         .navbar-rm { background-color: var(--rm-surface); padding: 15px 30px; border-bottom: 1px solid #333; }
         .logo-img-nav { max-height: 40px; width: auto; }
 
-        .stat-card { background-color: var(--rm-surface); border-radius: 8px; border: 1px solid #333; padding: 25px; transition: border-color 0.2s; }
-        .stat-card:hover { border-color: var(--rm-accent); }
+        .stat-card { background-color: var(--rm-surface); border-radius: 8px; border: 1px solid #333; padding: 25px; }
         .stat-title { color: var(--rm-text-secondary); text-transform: uppercase; font-size: 0.9rem; font-weight: 700; letter-spacing: 1px; margin-bottom: 10px; }
         .stat-value { font-size: 3.5rem; font-weight: 800; color: var(--rm-text-primary); line-height: 1; }
         .stat-icon { color: var(--rm-accent); font-size: 2.5rem; opacity: 0.8; }
@@ -25,15 +24,24 @@
         .table-rm th { color: var(--rm-text-secondary); text-transform: uppercase; font-size: 0.85rem; font-weight: 700; letter-spacing: 1px; padding: 15px; border-bottom: 2px solid #333; }
         .table-rm td { padding: 15px; border-bottom: 1px solid #2a2a2a; color: #EAEAEA; }
         .table-rm tr:last-child td { border-bottom: none; }
-        .table-rm tr:hover td { background-color: #252525; }
+        
+        /* Estilos personalizados para Modals (Norman/Krug congruencia) */
+        .modal-content { background-color: var(--rm-surface); border: 1px solid #444; color: var(--rm-text-primary); }
+        .modal-header { border-bottom: 1px solid #333; }
+        .modal-footer { border-top: 1px solid #333; }
+        .form-label { font-weight: 600; color: var(--rm-text-primary); margin-bottom: 6px; }
+        .rm-input { background-color: transparent; border: 2px solid #444; color: var(--rm-text-primary); padding: 10px; }
+        .rm-input:focus { background-color: transparent; border-color: var(--rm-accent); color: var(--rm-text-primary); box-shadow: none; }
+        .help-text { color: var(--rm-text-secondary); font-size: 0.85rem; margin-top: 4px; }
+        select.rm-input, select.rm-input option {
+        background-color: #252525 !important;
+        color: #FFFFFF !important;
+}
     </style>
 </head>
 <body>
     <nav class="navbar navbar-rm d-flex justify-content-between align-items-center mb-4">
-        <a href="#" class="text-decoration-none d-flex align-items-center gap-2">
-            <img src="{% static 'images/Logo.png' %}" alt="Icono RollsMusic" style="max-height: 45px; width: auto;">
-            <span class="fs-4 fw-bold text-white mb-0" style="letter-spacing: -0.5px;">RollsMusic</span>
-        </a>
+        <a href="#"><img src="{% static 'images/Logo.png' %}" alt="Icono RollsMusic" class="logo-img-nav"> <span class="fs-4 fw-bold text-white ms-2">RollsMusic</span></a>
         <div class="d-flex align-items-center gap-3">
             <span class="btn btn-sm btn-outline-info rounded-pill px-3 fs-6 fw-bold">Panel de Artista</span>
             <a class="btn btn-outline-light btn-sm rounded-pill px-3" href="{% url 'logout' %}">Cerrar Sesión</a>
@@ -41,25 +49,42 @@
     </nav>
 
     <div class="container">
+        <!-- Notificaciones de Sistema -->
+        {% if messages %}
+            {% for message in messages %}
+                <div class="alert alert-{% if message.tags == 'error' %}danger{% else %}success{% endif %} text-white border-0 fw-bold mb-4" style="background-color: {% if message.tags == 'error' %}#dc3545{% else %}#198754{% endif %};" role="alert">
+                    {{ message }}
+                </div>
+            {% endfor %}
+        {% endif %}
+
         {% if artista %}
-        <div class="d-flex align-items-center mb-5 p-4 border border-secondary rounded" style="background-color: var(--rm-surface);">
-            <div class="rounded-circle me-4 d-flex align-items-center justify-content-center" style="width: 100px; height: 100px; background-color: #333; border: 2px solid var(--rm-accent); font-size: 3rem;">
-                
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-5 p-4 border border-secondary rounded gap-3" style="background-color: var(--rm-surface);">
+            <div class="d-flex align-items-center">
+                <div class="rounded-circle me-4 d-flex align-items-center justify-content-center" style="width: 80px; height: 80px; background-color: #333; border: 2px solid var(--rm-accent); font-size: 2.5rem;">🎤</div>
+                <div>
+                    <span class="badge bg-info text-dark mb-1"><i class="bi bi-patch-check-fill me-1"></i>Perfil Verificado</span>
+                    <h1 class="h2 fw-bold mb-0">{{ artista.nombreArtistico }}</h1>
+                </div>
             </div>
-            <div>
-                <span class="badge bg-info text-dark mb-2"><i class="bi bi-patch-check-fill me-1"></i>Perfil Verificado</span>
-                <h1 class="display-4 fw-bold mb-0">{{ artista.nombreArtistico }}</h1>
-                <p class="text-muted fw-bold mb-0">Gestiona tu catálogo musical y revisa tus estadísticas.</p>
+            <!-- SIGNIFICANTES: Acciones obvias y visibles para subir contenido -->
+            <div class="d-flex gap-2">
+                <button class="btn btn-outline-light fw-bold px-3 py-2" data-bs-toggle="modal" data-bs-target="#modalAlbum">
+                    <i class="bi bi-folder-plus me-1"></i> Crear Álbum
+                </button>
+                <button class="btn px-3 py-2 fw-bold" style="background-color: var(--rm-accent); color: white;" data-bs-toggle="modal" data-bs-target="#modalCancion">
+                    <i class="bi bi-plus-circle-fill me-1"></i> Subir Canción
+                </button>
             </div>
         </div>
 
+        <!-- Módulos de Métricas -->
         <div class="row mb-5">
             <div class="col-md-6 mb-3">
                 <div class="stat-card d-flex justify-content-between align-items-start">
                     <div>
                         <div class="stat-title">Ingresos Totales (Regalías)</div>
                         <div class="stat-value text-success">${{ total_regalias }}</div>
-                        <p class="text-muted mt-2 mb-0 small fw-bold">Calculado en base a reproducciones</p>
                     </div>
                     <i class="bi bi-currency-dollar stat-icon"></i>
                 </div>
@@ -67,16 +92,16 @@
             <div class="col-md-6 mb-3">
                 <div class="stat-card d-flex justify-content-between align-items-start">
                     <div>
-                        <div class="stat-title">Minutos reproducidos en pista TOP</div>
-                        <div class="stat-value">{{ minutos_cancion_demo }}<span class="fs-3 fw-normal text-muted"> min</span></div>
-                        <p class="text-muted mt-2 mb-0 small fw-bold">Métrica de tiempo real</p>
+                        <div class="stat-title">Minutos en pista TOP</div>
+                        <div class="stat-value">{{ minutos_cancion_demo }}<span class="fs-4 text-muted"> min</span></div>
                     </div>
                     <i class="bi bi-clock-history stat-icon"></i>
                 </div>
             </div>
         </div>
 
-        <h3 class="fw-bold mb-3">Catálogo de Canciones</h3>
+        <!-- Tabla del catálogo -->
+        <h3 class="fw-bold mb-3">Tu Catálogo de Canciones</h3>
         <div class="table-responsive">
             <table class="table-rm">
                 <thead>
@@ -99,18 +124,92 @@
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="5" class="text-center py-4 text-muted">No tienes canciones registradas en este momento.</td>
+                        <td colspan="5" class="text-center py-4 text-muted">No tienes canciones registradas. Utiliza el botón superior para subir una.</td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
         </div>
-        {% else %}
-        <div class="alert alert-danger bg-danger text-white border-0" role="alert">
-            <i class="bi bi-exclamation-triangle-fill me-2 fs-5"></i>
-            <strong>Error de Configuración:</strong> No se encontró un perfil de artista vinculado a tu cuenta.
-        </div>
         {% endif %}
     </div>
+
+    <!-- ================= MODAL: CREAR ÁLBUM ================= -->
+    <div class="modal fade" id="modalAlbum" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold">💿 Registrar Nuevo Álbum</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form action="{% url 'crear_album_artista' %}" method="POST">
+                    {% csrf_token %}
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label for="titulo_album" class="form-label">Título del Álbum</label>
+                            <input type="text" class="form-control rm-input" id="titulo_album" name="titulo" required placeholder="Ej. Un Verano Sin Ti">
+                        </div>
+                        <div class="mb-3">
+                            <label for="fecha_lanzamiento" class="form-label">Fecha de Lanzamiento</label>
+                            <input type="date" class="form-control rm-input" id="fecha_lanzamiento" name="fecha_lanzamiento" required style="color-scheme: dark;">
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary fw-bold" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="submit" class="btn fw-bold" style="background-color: var(--rm-accent); color: white;">Guardar Álbum</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= MODAL: SUBIR CANCIÓN ================= -->
+    <div class="modal fade" id="modalCancion" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold">🎵 Agregar Pista al Catálogo</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form action="{% url 'subir_cancion_artista' %}" method="POST">
+                    {% csrf_token %}
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label for="album_id" class="form-label">Seleccionar Álbum Asociado</label>
+                            <select class="form-select rm-input" id="album_id" name="album_id" required style="color-scheme: dark;">
+                                <option value="" disabled selected>-- Elige un álbum de tu lista --</option>
+                                {% for alb in albums_artista %}
+                                    <option value="{{ alb.0 }}">{{ alb.1 }}</option>
+                                {% endfor %}
+                            </select>
+                            <div class="help-text">Si tu álbum no aparece, primero debes crearlo usando el botón de "Crear Álbum".</div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="titulo_cancion" class="form-label">Título de la Canción</label>
+                            <input type="text" class="form-control rm-input" id="titulo_cancion" name="titulo" required placeholder="Ej. Moscow Mule">
+                        </div>
+                        <div class="mb-3">
+                            <label for="duracion" class="form-label">Duración de la pista</label>
+                            <input type="number" class="form-control rm-input" id="duracion" name="duracion" required placeholder="Ej. 180">
+                            <div class="help-text">Escribe la duración total calculada en **segundos**.</div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="calidadAudio" class="form-label">Calidad del Audio de Origen</label>
+                            <select class="form-select rm-input" id="calidadAudio" name="calidadAudio" style="color-scheme: dark;">
+                                <option value="Alta" selected>Alta definición (Dolby/Lossless)</option>
+                                <option value="Media">Media (Estándar MP3 320kbps)</option>
+                                <option value="Baja">Baja (Compreso para ahorro de datos)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary fw-bold" data-bs-dismiss="modal">Cerrar</button>
+                        <button type="submit" class="btn fw-bold" style="background-color: var(--rm-accent); color: white;">Publicar Canción</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
