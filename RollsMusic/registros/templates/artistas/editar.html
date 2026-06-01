@@ -76,9 +76,15 @@
                 </div>
 
                 <div class="mb-3">
-                    <label for="genero" class="form-label">Género Principal</label>
-                    <!-- CORRECCIÓN: Se añade name="genero" y value="{{ genero_actual }}" -->
-                    <input type="text" class="form-control" id="genero" name="genero" value="{{ genero_actual }}" placeholder="Ej. Regueton, Pop, Rock">
+                    <label for="generoPrincipal" class="form-label">Género Principal</label>
+                    <select name="generoPrincipal" id="generoPrincipal" class="form-select" required style="color-scheme: dark;">
+                        <option value="" disabled>-- Selecciona el género musical --</option>
+                        {% for gen in generos %}
+                        <option value="{{ gen.nombre }}" {% if gen.nombre == genero_actual %}selected{% endif %}>
+                            {{ gen.nombre }}
+                        </option>
+                        {% endfor %}
+                    </select>
                 </div>
 
                 <div class="mb-3">

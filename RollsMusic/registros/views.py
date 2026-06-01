@@ -98,8 +98,9 @@ def eliminar_discografica(request, id):
         return redirect('listar_discograficas')
 
 # ==========================================
-# CRUD: ARTISTAS (Corregido estructuralmente)
+# CRUD: ARTISTAS (Con Géneros Dinámicos)
 # ==========================================
+
 @verificar_rol(['Admin'])
 def listar_artistas(request):
     items = Artista.objects.all()
@@ -108,6 +109,7 @@ def listar_artistas(request):
 @verificar_rol(['Admin'])
 def crear_artista(request):
     discograficas = Discografica.objects.all()
+    generos = Genero.objects.all() # <-- 1. Recuperamos los géneros de la BD
     
     if request.method == 'POST':
         nombre_artistico = request.POST.get('nombreArtistico')
@@ -115,7 +117,8 @@ def crear_artista(request):
         pais = request.POST.get('pais', 'Desconocido')
         fecha_creacion = request.POST.get('fechaCreacion') or date.today()
         disco_id = request.POST.get('discografica')
-        id_usuario = request.POST.get('usuario')  # <-- CORRECCIÓN: Capturamos el ID del usuario seleccionado
+        id_usuario = request.POST.get('usuario')
+        genero_form = request.POST.get('generoPrincipal') # <-- Capturamos el género seleccionado
         
         with connection.cursor() as cursor:
             try:
@@ -124,15 +127,21 @@ def crear_artista(request):
                 art_cols = [row[0] for row in cursor.fetchall()]
                 col_art_usuario = 'Usuario_idUsuario' if 'Usuario_idUsuario' in art_cols else ('idUsuario' if 'idUsuario' in art_cols else ('Usuario_id' if 'Usuario_id' in art_cols else None))
                 col_art_nombre = 'nombreArtistico' if 'nombreArtistico' in art_cols else ('nombre_artistico' if 'nombre_artistico' in art_cols else 'nombre')
+                col_art_genero = 'genero' if 'genero' in art_cols else ('generoPrincipal' if 'generoPrincipal' in art_cols else None)
                 
                 cols = [col_art_nombre, 'pais', 'fechaCreacion', 'imagen', 'biografia', 'Discografica_idDiscografica']
                 vals = [nombre_artistico, pais, fecha_creacion, 'default_artist.png', biografia, disco_id]
                 placeholders = ["%s"] * len(cols)
                 
-                # Si la columna relacional existe en tu base de datos, insertamos el ID del usuario
                 if col_art_usuario and id_usuario:
                     cols.append(col_art_usuario)
                     vals.append(int(id_usuario))
+                    placeholders.append("%s")
+                
+                # Si la columna de género existe, agregamos el texto seleccionado a la inserción SQL
+                if col_art_genero and genero_form:
+                    cols.append(col_art_genero)
+                    vals.append(genero_form)
                     placeholders.append("%s")
                     
                 sql_insert = f"INSERT INTO Catalogo.Artista ({', '.join(cols)}) VALUES ({', '.join(placeholders)})"
@@ -149,14 +158,15 @@ def crear_artista(request):
         
     return render(request, 'artistas/crear.html', {
         'discograficas': discograficas,
-        'usuarios_artistas': usuarios_artistas  
+        'usuarios_artistas': usuarios_artistas,
+        'generos': generos # <-- 2. Enviamos los géneros al contexto de creación
     })
 
 @verificar_rol(['Admin'])
 def editar_artista(request, id):
-    # 1. Recuperamos el objeto ORM real para que el HTML se llene automáticamente
     artista_obj = get_object_or_404(Artista, idArtista=id)
     discograficas = Discografica.objects.all()
+    generos = Genero.objects.all() # <-- 1. Recuperamos los géneros de la BD también para la edición
     
     usuarios_artistas = Usuario.objects.filter(Rol_idRol__nombre='Artista')
     if not usuarios_artistas.exists():
@@ -165,7 +175,6 @@ def editar_artista(request, id):
     artista_usuario_id = None
     genero_actual = ""
     
-    # 2. Consultar de forma segura las columnas añadidas por fuera del ORM
     with connection.cursor() as cursor:
         cursor.execute("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'Catalogo' AND TABLE_NAME = 'Artista'")
         art_cols = [row[0] for row in cursor.fetchall()]
@@ -173,7 +182,6 @@ def editar_artista(request, id):
         col_art_usuario = 'Usuario_idUsuario' if 'Usuario_idUsuario' in art_cols else ('idUsuario' if 'idUsuario' in art_cols else ('Usuario_id' if 'Usuario_id' in art_cols else None))
         col_art_genero = 'genero' if 'genero' in art_cols else ('generoPrincipal' if 'generoPrincipal' in art_cols else None)
         
-        # Traer los valores actuales de la base de datos
         query_extra = "SELECT idArtista"
         if col_art_usuario: query_extra += f", {col_art_usuario}"
         if col_art_genero: query_extra += f", {col_art_genero}"
@@ -190,17 +198,15 @@ def editar_artista(request, id):
                 genero_actual = row[idx] if row[idx] else ""
 
     if request.method == 'POST':
-        # Capturar los datos enviados por el formulario
         nombre_form = request.POST.get('nombreArtistico')
         biografia_form = request.POST.get('biografia', '')
         pais_form = request.POST.get('pais', 'Desconocido')
         disco_id = request.POST.get('discografica')
         id_usuario = request.POST.get('usuario')
-        genero_form = request.POST.get('genero', '').strip() # <-- Capturamos el género de la pantalla
+        genero_form = request.POST.get('generoPrincipal') # <-- Ajustado para mantener congruencia de nombres
 
         with connection.cursor() as cursor:
             try:
-                # Mapeo del nombre de la columna física para actualizar el objeto ORM
                 col_art_nombre = 'nombre' if 'nombre' in art_cols else 'nombreArtistico'
                 
                 sql_update = f"UPDATE Catalogo.Artista SET {col_art_nombre} = %s, biografia = %s, Discografica_idDiscografica = %s"
@@ -217,17 +223,18 @@ def editar_artista(request, id):
                 params.append(id)
                 
                 cursor.execute(sql_update, params)
-                messages.success(request, f"✨ Perfil de '{nombre_form}' actualizado correctamente en la Base de Datos.")
+                messages.success(request, f"✨ Perfil de '{nombre_form}' actualizado correctamente.")
                 return redirect('listar_artistas')
             except Exception as e:
                 messages.error(request, f"Error al guardar en SQL Server: {str(e)}")
     
     return render(request, 'artistas/editar.html', {
-        'artista': artista_obj,             # <-- Pasamos el objeto original (¡Llena los campos mágicamente!)
+        'artista': artista_obj,
         'artista_usuario_id': artista_usuario_id,
-        'genero_actual': genero_actual,     # <-- Enviamos el género recuperado en limpio
+        'genero_actual': genero_actual,
         'discograficas': discograficas,
-        'usuarios_artistas': usuarios_artistas
+        'usuarios_artistas': usuarios_artistas,
+        'generos': generos # <-- 2. Enviamos los géneros al contexto de edición
     })
 
 @verificar_rol(['Admin'])

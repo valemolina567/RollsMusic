@@ -65,7 +65,12 @@
 
                 <div class="mb-3">
                     <label for="generoPrincipal" class="form-label">Género Principal</label>
-                    <input type="text" name="generoPrincipal" id="generoPrincipal" class="form-control" placeholder="Ej: Rock Alternativo, Pop, Trap..." required>
+                    <select name="generoPrincipal" id="generoPrincipal" class="form-select" required style="color-scheme: dark;">
+                        <option value="" disabled selected>-- Selecciona el género musical --</option>
+                        {% for gen in generos %}
+                        <option value="{{ gen.nombre }}">{{ gen.nombre }}</option>
+                        {% endfor %}
+                    </select>
                 </div>
 
                 <div class="mb-3">
