@@ -78,7 +78,7 @@ DATABASES = {
     'default': {
         'ENGINE': 'mssql',
         'NAME': 'RollsMusic',
-        'HOST': r'.\SQL2025',
+        'HOST': r'.',
         'OPTIONS': {
             'driver': 'ODBC Driver 17 for SQL Server',
             'trusted_connection': 'yes',

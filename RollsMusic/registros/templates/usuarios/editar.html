@@ -48,14 +48,17 @@
             </div>
 
             {% if messages %}
-                <div class="alert alert-danger bg-danger bg-opacity-10 border-danger text-danger py-2 px-3 mb-4 rounded" role="alert">
-                    <ul class="mb-0 ps-3">
-                        {% for message in messages %}
-                            <li><strong>Error:</strong> {{ message }}</li>
-                        {% endfor %}
-                    </ul>
-                </div>
-            {% endif %}
+                {% for message in messages %}
+                    <div class="alert alert-{% if message.tags == 'error' %}danger bg-danger{% else %}success bg-success{% endif %} text-white border-0 fw-bold mb-4" role="alert">
+                        {% if message.tags == 'error' %}
+                            <i class="bi bi-exclamation-octagon-fill me-2"></i><strong>Error:</strong> 
+                        {% else %}
+                            <i class="bi bi-check-circle-fill me-2"></i>
+                        {% endif %}
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            {% endif %}     
 
             <form method="POST">
                 {% csrf_token %}
@@ -81,16 +84,16 @@
                         <label for="estado" class="form-label">Estado de la cuenta</label>
                         <input type="text" id="estado" name="estado" class="form-control" value="{{ usuario.estado }}" placeholder="Ej: Activo, Suspendido..." required>
                     </div>
-                    <div class="col-md-6">
-                        <label for="rol" class="form-label">Rol del Usuario</label>
-                        <select name="rol" id="rol" class="form-select">
-                            {% for rol in roles %}
-                            <option value="{{ rol.idRol }}" {% if rol.idRol == usuario.Rol_idRol %}selected{% endif %}>
-                                {{ rol.nombre }}
-                            </option>
-                            {% endfor %}
-                        </select>
-                    </div>
+                        <div class="col-md-6">
+                            <label for="rol" class="form-label">Rol del Usuario</label>
+                            <select name="rol" id="rol" class="form-select">
+                                {% for rol in roles %}
+                                <option value="{{ rol.idRol }}" {% if rol.idRol == usuario.Rol_idRol_id %}selected{% endif %}>
+                                    {{ rol.nombre }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
                 </div>
 
                 <button type="submit" class="btn btn-rm-accent w-100 py-2.5 rounded text-uppercase tracking-wider">

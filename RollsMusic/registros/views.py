@@ -112,41 +112,123 @@ def crear_artista(request):
     if request.method == 'POST':
         nombre_artistico = request.POST.get('nombreArtistico')
         biografia = request.POST.get('biografia', '')
-        pais = request.POST.get('pais', 'Desconocido') # Añadido según tu BD
-        fecha_creacion = request.POST.get('fechaCreacion', date.today()) # Añadido según tu BD
+        pais = request.POST.get('pais', 'Desconocido')
+        fecha_creacion = request.POST.get('fechaCreacion') or date.today()
         disco_id = request.POST.get('discografica')
+        id_usuario = request.POST.get('usuario')  # <-- CORRECCIÓN: Capturamos el ID del usuario seleccionado
         
-        disco = get_object_or_404(Discografica, idDiscografica=disco_id)
-        
-        Artista.objects.create(
-            nombreArtistico=nombre_artistico, 
-            biografia=biografia, 
-            pais=pais,
-            fechaCreacion=fecha_creacion,
-            imagen='default_artist.png',
-            Discografica_idDiscografica=disco
-        )
-        return redirect('listar_artistas')
+        with connection.cursor() as cursor:
+            try:
+                # Localizar las columnas reales de tu base de datos
+                cursor.execute("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'Catalogo' AND TABLE_NAME = 'Artista'")
+                art_cols = [row[0] for row in cursor.fetchall()]
+                col_art_usuario = 'Usuario_idUsuario' if 'Usuario_idUsuario' in art_cols else ('idUsuario' if 'idUsuario' in art_cols else ('Usuario_id' if 'Usuario_id' in art_cols else None))
+                col_art_nombre = 'nombreArtistico' if 'nombreArtistico' in art_cols else ('nombre_artistico' if 'nombre_artistico' in art_cols else 'nombre')
+                
+                cols = [col_art_nombre, 'pais', 'fechaCreacion', 'imagen', 'biografia', 'Discografica_idDiscografica']
+                vals = [nombre_artistico, pais, fecha_creacion, 'default_artist.png', biografia, disco_id]
+                placeholders = ["%s"] * len(cols)
+                
+                # Si la columna relacional existe en tu base de datos, insertamos el ID del usuario
+                if col_art_usuario and id_usuario:
+                    cols.append(col_art_usuario)
+                    vals.append(int(id_usuario))
+                    placeholders.append("%s")
+                    
+                sql_insert = f"INSERT INTO Catalogo.Artista ({', '.join(cols)}) VALUES ({', '.join(placeholders)})"
+                cursor.execute(sql_insert, vals)
+                
+                messages.success(request, f"Perfil artístico de '{nombre_artistico}' creado y vinculado correctamente.")
+                return redirect('listar_artistas')
+            except Exception as e:
+                messages.error(request, f"Error de integridad en SQL Server: {str(e)}")
+                
+    usuarios_artistas = Usuario.objects.filter(Rol_idRol__nombre='Artista')
+    if not usuarios_artistas.exists():
+        usuarios_artistas = Usuario.objects.all()
         
     return render(request, 'artistas/crear.html', {
-        'discograficas': discograficas
+        'discograficas': discograficas,
+        'usuarios_artistas': usuarios_artistas  
     })
 
 @verificar_rol(['Admin'])
 def editar_artista(request, id):
-    item = get_object_or_404(Artista, idArtista=id)
+    # 1. Recuperamos el objeto ORM real para que el HTML se llene automáticamente
+    artista_obj = get_object_or_404(Artista, idArtista=id)
     discograficas = Discografica.objects.all()
     
-    if request.method == 'POST':
-        # CORRECCIÓN: Solo campos reales de la tabla Artista en SQL Server
-        item.nombreArtistico = request.POST.get('nombreArtistico')
-        item.pais = request.POST.get('pais', item.pais)
-        item.biografia = request.POST.get('biografia')
-        item.Discografica_idDiscografica = get_object_or_404(Discografica, idDiscografica=request.POST.get('discografica'))
-        item.save()
-        return redirect('listar_artistas')
+    usuarios_artistas = Usuario.objects.filter(Rol_idRol__nombre='Artista')
+    if not usuarios_artistas.exists():
+        usuarios_artistas = Usuario.objects.all()
+
+    artista_usuario_id = None
+    genero_actual = ""
+    
+    # 2. Consultar de forma segura las columnas añadidas por fuera del ORM
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'Catalogo' AND TABLE_NAME = 'Artista'")
+        art_cols = [row[0] for row in cursor.fetchall()]
         
-    return render(request, 'artistas/editar.html', {'item': item, 'discograficas': discograficas})
+        col_art_usuario = 'Usuario_idUsuario' if 'Usuario_idUsuario' in art_cols else ('idUsuario' if 'idUsuario' in art_cols else ('Usuario_id' if 'Usuario_id' in art_cols else None))
+        col_art_genero = 'genero' if 'genero' in art_cols else ('generoPrincipal' if 'generoPrincipal' in art_cols else None)
+        
+        # Traer los valores actuales de la base de datos
+        query_extra = "SELECT idArtista"
+        if col_art_usuario: query_extra += f", {col_art_usuario}"
+        if col_art_genero: query_extra += f", {col_art_genero}"
+        query_extra += " FROM Catalogo.Artista WHERE idArtista = %s"
+        
+        cursor.execute(query_extra, [id])
+        row = cursor.fetchone()
+        if row:
+            idx = 1
+            if col_art_usuario:
+                artista_usuario_id = row[idx]
+                idx += 1
+            if col_art_genero:
+                genero_actual = row[idx] if row[idx] else ""
+
+    if request.method == 'POST':
+        # Capturar los datos enviados por el formulario
+        nombre_form = request.POST.get('nombreArtistico')
+        biografia_form = request.POST.get('biografia', '')
+        pais_form = request.POST.get('pais', 'Desconocido')
+        disco_id = request.POST.get('discografica')
+        id_usuario = request.POST.get('usuario')
+        genero_form = request.POST.get('genero', '').strip() # <-- Capturamos el género de la pantalla
+
+        with connection.cursor() as cursor:
+            try:
+                # Mapeo del nombre de la columna física para actualizar el objeto ORM
+                col_art_nombre = 'nombre' if 'nombre' in art_cols else 'nombreArtistico'
+                
+                sql_update = f"UPDATE Catalogo.Artista SET {col_art_nombre} = %s, biografia = %s, Discografica_idDiscografica = %s"
+                params = [nombre_form, biografia_form, disco_id]
+                
+                if col_art_usuario:
+                    sql_update += f", {col_art_usuario} = %s"
+                    params.append(int(id_usuario) if id_usuario else None)
+                if col_art_genero:
+                    sql_update += f", {col_art_genero} = %s"
+                    params.append(genero_form)
+                    
+                sql_update += " WHERE idArtista = %s"
+                params.append(id)
+                
+                cursor.execute(sql_update, params)
+                messages.success(request, f"✨ Perfil de '{nombre_form}' actualizado correctamente en la Base de Datos.")
+                return redirect('listar_artistas')
+            except Exception as e:
+                messages.error(request, f"Error al guardar en SQL Server: {str(e)}")
+    
+    return render(request, 'artistas/editar.html', {
+        'artista': artista_obj,             # <-- Pasamos el objeto original (¡Llena los campos mágicamente!)
+        'artista_usuario_id': artista_usuario_id,
+        'genero_actual': genero_actual,     # <-- Enviamos el género recuperado en limpio
+        'discograficas': discograficas,
+        'usuarios_artistas': usuarios_artistas
+    })
 
 @verificar_rol(['Admin'])
 def eliminar_artista(request, id):
@@ -372,28 +454,27 @@ def crear_usuario(request):
 @verificar_rol(['Admin'])
 def editar_usuario(request, id):
     usuario = get_object_or_404(Usuario, idUsuario=id)
-    
-    # 1. Traemos todos los roles para que el menú select tenga opciones
     roles = Rol.objects.all() 
     
     if request.method == 'POST':
-        usuario.nombre = request.POST.get('nombre')
-        usuario.apellido = request.POST.get('apellido')
-        usuario.correo = request.POST.get('correo')
-        usuario.estado = request.POST.get('estado')
+        usuario.nombre = request.POST.get('nombre', '').strip()
+        usuario.apellido = request.POST.get('apellido', '').strip()
+        usuario.correo = request.POST.get('correo', '').strip()
+        usuario.estado = request.POST.get('estado', '').strip()
         
         if request.POST.get('fechaNacimiento'):
             usuario.fechaNacimiento = request.POST.get('fechaNacimiento')
             
-        # 2. Capturamos el rol seleccionado y lo actualizamos
         id_rol = request.POST.get('rol')
         if id_rol:
-            usuario.Rol_idRol = int(id_rol) # O "usuario.rol_id = id_rol" según cómo se llame el campo FK en tu modelo
+            usuario.Rol_idRol_id = int(id_rol)
             
         usuario.save()
+        
+        # CONFIRMACIÓN VISUAL: Agregamos una notificación de éxito
+        messages.success(request, f"El perfil de '{usuario.nombre} {usuario.apellido}' ha sido actualizado exitosamente.")
         return redirect('listar_usuarios')
         
-    # 3. Agregamos 'roles' al diccionario de contexto
     return render(request, 'usuarios/editar.html', {
         'usuario': usuario,
         'roles': roles
@@ -570,16 +651,30 @@ def dashboard_usuario(request):
             except Exception:
                 recomendaciones = []
 
-    plan_info = request.session.get('plan_info', {'plan_nombre': 'Premium', 'suscripcion_estado': 'Activa'})
+    plan_info = {'plan_nombre': 'Free', 'suscripcion_estado': 'Activa'}  # Plan base por defecto si no tiene registro
+    with connection.cursor() as cursor:
+        try:
+            cursor.execute("""
+                SELECT TOP 1 P.nombre, S.estado 
+                FROM Facturacion.Suscripcion S
+                INNER JOIN Facturacion.PlanEntity P ON S.PlanEntity_idPlan = P.idPlan
+                WHERE S.Usuario_idUsuario = %s AND S.estado = 'Activa'
+                ORDER BY S.idSuscripcion DESC
+            """, [usuario_id])
+            plan_row = cursor.fetchone()
+            if plan_row:
+                plan_info = {'plan_nombre': plan_row[0], 'suscripcion_estado': plan_row[1]}
+        except Exception:
+            pass
 
     context = {
         'top_canciones': top_canciones,
         'recomendaciones': recomendaciones,
-        'plan_info': plan_info,
+        'plan_info': plan_info,  # <-- Enviamos el plan real extraído de la BD
         'playlists': playlists_usuario,
         'auto_open_playlist_id': auto_open_id,
     }
-    return render(request, 'dashboards/usuario.html', context)
+    return render(request, 'dashboards/usuario.html', context)  
 
 @verificar_rol(['Artista', 'Admin'])
 def dashboard_artista(request):
@@ -592,26 +687,26 @@ def dashboard_artista(request):
     minutos_cancion_demo = 0
     canciones_artista = []
     albums_artista = []
+    art_cols = []  
     
     with connection.cursor() as cursor:
         try:
-            # 1. INSPECCIÓN EN TIEMPO REAL: Columnas de Catalogo.Artista
+            # 1. Inspeccionar columnas para blindaje de lógicas dinámicas
             cursor.execute("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'Catalogo' AND TABLE_NAME = 'Artista'")
             art_cols = [row[0] for row in cursor.fetchall()]
+            
             col_art_nombre = 'nombreArtistico' if 'nombreArtistico' in art_cols else ('nombre_artistico' if 'nombre_artistico' in art_cols else 'nombre')
             col_art_usuario = 'Usuario_idUsuario' if 'Usuario_idUsuario' in art_cols else ('idUsuario' if 'idUsuario' in art_cols else ('Usuario_id' if 'Usuario_id' in art_cols else 'idArtista'))
             
-            # 2. INSPECCIÓN EN TIEMPO REAL: Columnas de Catalogo.Album
             cursor.execute("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'Catalogo' AND TABLE_NAME = 'Album'")
             alb_cols = [row[0] for row in cursor.fetchall()]
             col_alb_artista = 'Artista_idArtista' if 'Artista_idArtista' in alb_cols else ('idArtista' if 'idArtista' in alb_cols else 'Artista_id')
             
-            # 3. INSPECCIÓN EN TIEMPO REAL: Columnas de Catalogo.Cancion
             cursor.execute("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'Catalogo' AND TABLE_NAME = 'Cancion'")
             can_cols = [row[0] for row in cursor.fetchall()]
             col_can_album = 'Album_idAlbum' if 'Album_idAlbum' in can_cols else ('idAlbum' if 'idAlbum' in can_cols else 'Album_id')
 
-            # --- EJECUCIÓN CON COLUMNAS MAPEADAS ---
+            # --- EJECUCIÓN CON ENLACE DIRECTO ---
             query_artista = f"SELECT idArtista, {col_art_nombre} FROM Catalogo.Artista WHERE {col_art_usuario} = %s"
             cursor.execute(query_artista, [usuario_id])
             artista_row = cursor.fetchone()
@@ -620,12 +715,10 @@ def dashboard_artista(request):
                 id_artista = artista_row[0]
                 artista = {'idArtista': id_artista, 'nombreArtistico': artista_row[1]}
                 
-                # Métrica: Total de Regalías
                 cursor.execute("SELECT Facturacion.fn_TotalRegaliaArtista(%s)", [id_artista])
                 regalias_row = cursor.fetchone()
                 total_regalias = regalias_row[0] if regalias_row and regalias_row[0] is not None else 0
                 
-                # Métrica: Minutos reproducidos pista TOP
                 cursor.execute(f"""
                     SELECT TOP 1 Usuarios.fn_MinutosReproduccionCancion(idCancion)
                     FROM Catalogo.Cancion 
@@ -634,7 +727,6 @@ def dashboard_artista(request):
                 minutos_row = cursor.fetchone()
                 minutos_cancion_demo = minutos_row[0] if minutos_row and minutos_row[0] is not None else 0
                 
-                # Obtener catálogo de canciones
                 cursor.execute(f"""
                     SELECT C.titulo, C.duracion, C.calidadAudio, A.titulo AS album_titulo 
                     FROM Catalogo.Cancion C
@@ -652,7 +744,6 @@ def dashboard_artista(request):
                     } for r in raw_canciones
                 ]
                 
-                # Obtener álbumes para el dropdown del Modal
                 cursor.execute(f"SELECT idAlbum, titulo FROM Catalogo.Album WHERE {col_alb_artista} = %s", [id_artista])
                 albums_artista = cursor.fetchall()
                 
@@ -665,6 +756,7 @@ def dashboard_artista(request):
         'minutos_cancion_demo': minutos_cancion_demo,
         'canciones_artista': canciones_artista,
         'albums_artista': albums_artista,
+        'columnas_encontradas': art_cols,  # <-- Enviado para activar el panel de diagnóstico
     }
     return render(request, 'dashboards/artista.html', context)
 
@@ -707,7 +799,7 @@ def procesar_pago(request):
                     @idSuscripcion = %s
             """, [monto, metodo, id_suscripcion])
             
-        messages.success(request, "¡Transacción completada! Tu cuenta ha sido actualizada a Premium ✨")
+        messages.success(request, "¡Transacción completada! Tu cuenta ha sido actualizada a Premium")
         return redirect('dashboard_usuario')
         
     return render(request, 'dashboards/facturacion.html')
