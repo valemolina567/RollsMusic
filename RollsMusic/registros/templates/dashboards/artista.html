@@ -25,7 +25,6 @@
         .table-rm td { padding: 15px; border-bottom: 1px solid #2a2a2a; color: #EAEAEA; }
         .table-rm tr:last-child td { border-bottom: none; }
         
-        /* Estilos personalizados para Modals (Norman/Krug congruencia) */
         .modal-content { background-color: var(--rm-surface); border: 1px solid #444; color: var(--rm-text-primary); }
         .modal-header { border-bottom: 1px solid #333; }
         .modal-footer { border-top: 1px solid #333; }
@@ -33,15 +32,12 @@
         .rm-input { background-color: transparent; border: 2px solid #444; color: var(--rm-text-primary); padding: 10px; }
         .rm-input:focus { background-color: transparent; border-color: var(--rm-accent); color: var(--rm-text-primary); box-shadow: none; }
         .help-text { color: var(--rm-text-secondary); font-size: 0.85rem; margin-top: 4px; }
-        select.rm-input, select.rm-input option {
-        background-color: #252525 !important;
-        color: #FFFFFF !important;
-}
+        select.rm-input, select.rm-input option { background-color: #252525 !important; color: #FFFFFF !important; }
     </style>
 </head>
 <body>
-    <nav class="navbar navbar-rm d-flex justify-content-between align-items-center mb-4">
-        <a href="#"><img src="{% static 'images/Logo.png' %}" alt="Icono RollsMusic" class="logo-img-nav"> <span class="fs-4 fw-bold text-white ms-2">RollsMusic</span></a>
+        <nav class="navbar navbar-rm d-flex justify-content-between align-items-center mb-4">
+        <a href="#" style="text-decoration: none !important;"><img src="{% static 'images/Logo.png' %}" alt="Icono RollsMusic" class="logo-img-nav"> <span class="fs-4 fw-bold text-white ms-2">RollsMusic</span></a>
         <div class="d-flex align-items-center gap-3">
             <span class="btn btn-sm btn-outline-info rounded-pill px-3 fs-6 fw-bold">Panel de Artista</span>
             <a class="btn btn-outline-light btn-sm rounded-pill px-3" href="{% url 'logout' %}">Cerrar Sesión</a>
@@ -49,7 +45,6 @@
     </nav>
 
     <div class="container">
-        <!-- Notificaciones de Sistema -->
         {% if messages %}
             {% for message in messages %}
                 <div class="alert alert-{% if message.tags == 'error' %}danger{% else %}success{% endif %} text-white border-0 fw-bold mb-4" style="background-color: {% if message.tags == 'error' %}#dc3545{% else %}#198754{% endif %};" role="alert">
@@ -67,7 +62,6 @@
                     <h1 class="h2 fw-bold mb-0">{{ artista.nombreArtistico }}</h1>
                 </div>
             </div>
-            <!-- SIGNIFICANTES: Acciones obvias y visibles para subir contenido -->
             <div class="d-flex gap-2">
                 <button class="btn btn-outline-light fw-bold px-3 py-2" data-bs-toggle="modal" data-bs-target="#modalAlbum">
                     <i class="bi bi-folder-plus me-1"></i> Crear Álbum
@@ -78,7 +72,6 @@
             </div>
         </div>
 
-        <!-- Módulos de Métricas -->
         <div class="row mb-5">
             <div class="col-md-6 mb-3">
                 <div class="stat-card d-flex justify-content-between align-items-start">
@@ -100,7 +93,6 @@
             </div>
         </div>
 
-        <!-- Tabla del catálogo -->
         <h3 class="fw-bold mb-3">Tu Catálogo de Canciones</h3>
         <div class="table-responsive">
             <table class="table-rm">
@@ -130,10 +122,31 @@
                 </tbody>
             </table>
         </div>
+
+        {% else %}
+        <div class="card border border-warning rounded p-4 mt-4 text-white shadow-lg" style="background-color: #1A1A1A;">
+            <div class="d-flex align-items-center mb-3">
+                <i class="bi bi-shield-exclamation text-warning display-5 me-3"></i>
+                <div>
+                    <h4 class="fw-bold mb-0 text-warning">Centro de Diagnóstico: Cuenta sin Vínculo de Catálogo</h4>
+                    <p class="text-muted small mb-0">Iniciaste sesión correctamente como Artista, pero tu cuenta no está enlazada a ningún perfil musical en la base de datos.</p>
+                </div>
+            </div>
+            
+            <hr class="border-secondary">
+            
+            <h6 class="fw-bold text-info mb-2"><i class="bi bi-database-fill-gear me-2"></i>Columnas físicas reales encontradas en la tabla <code>Catalogo.Artista</code>:</h6>
+            <div class="bg-black p-3 rounded font-monospace text-success small mb-3 border border-secondary">
+                [ {% for col in columnas_encontradas %}"{{ col }}"{% if not forloop.last %}, {% endif %}{% empty %}No se recuperaron columnas. Revisa el estado de SQL Server.{% endfor %} ]
+            </div>
+
+            <p class="small text-white-50">
+                 Si en el recuadro verde de arriba <strong>NO ves</strong> la columna <code>Usuario_idUsuario</code> (o similar), significa que la tabla física en SQL Server no tiene el campo para enlazar la cuenta del usuario. Recuerda ejecutar el script <code>ALTER TABLE</code> en SQL Server Management Studio para crear la columna y luego registrar el perfil desde el admin.
+            </p>
+        </div>
         {% endif %}
     </div>
 
-    <!-- ================= MODAL: CREAR ÁLBUM ================= -->
     <div class="modal fade" id="modalAlbum" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
@@ -162,7 +175,6 @@
         </div>
     </div>
 
-    <!-- ================= MODAL: SUBIR CANCIÓN ================= -->
     <div class="modal fade" id="modalCancion" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">

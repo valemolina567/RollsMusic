@@ -55,8 +55,19 @@
             <form method="POST">
                 {% csrf_token %}
                 <div class="mb-3">
-                    <label class="form-label">Usuario Asociado (No editable)</label>
-                    <input type="text" class="form-control" value="{{ item.Usuario_idUsuario.nombre }} {{ item.Usuario_idUsuario.apellido }}" readonly>
+                    <label for="usuario" class="form-label">Usuario Asociado (Cuenta de Acceso)</label>
+                    <select name="usuario" id="usuario" class="form-select" style="background-color: #252525; color: white; border: 1px solid #444;">
+                        <option value="">-- Seleccionar Cuenta de Usuario --</option>
+                        {% for usu in usuarios_artistas %}
+                            <option value="{{ usu.idUsuario }}" {% if usu.idUsuario == artista_usuario_id %}selected{% endif %}>
+                                {{ usu.nombre }} {{ usu.apellido }} ({{ usu.correo }})
+                            </option>
+                        {% endfor %}
+                    </select>
+                    <!-- CORRECCIÓN DE CONTRASTE: color inline para romper el camuflaje oscuro -->
+                    <div class="form-text small mt-1" style="color: #00AEEF !important; font-weight: 600;">
+                        <i class="bi bi-info-circle-fill me-1"></i> Elige la cuenta con la que el artista iniciará sesión para ver su catálogo.
+                    </div>
                 </div>
 
                 <div class="mb-3">
@@ -65,8 +76,9 @@
                 </div>
 
                 <div class="mb-3">
-                    <label for="generoPrincipal" class="form-label">Género Principal</label>
-                    <input type="text" name="generoPrincipal" id="generoPrincipal" class="form-control" value="{{ item.generoPrincipal }}" required>
+                    <label for="genero" class="form-label">Género Principal</label>
+                    <!-- CORRECCIÓN: Se añade name="genero" y value="{{ genero_actual }}" -->
+                    <input type="text" class="form-control" id="genero" name="genero" value="{{ genero_actual }}" placeholder="Ej. Regueton, Pop, Rock">
                 </div>
 
                 <div class="mb-3">
