@@ -1,12 +1,15 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from datetime import date
+from django.db.models import Q
+
 # Se añade 'Rol' a las importaciones
 from .models import Usuario, Discografica, Artista, Album, Cancion, Genero, PlanEntity, Rol
 from django.db import connection
 from django.db import DatabaseError
 from functools import wraps
 from django.http import JsonResponse
+
 
 def verificar_rol(roles_permitidos):
     """Decorador para restringir el acceso a vistas según el rol de la sesión."""
@@ -37,12 +40,14 @@ def verificar_rol(roles_permitidos):
 
 @verificar_rol(['Admin'])
 def listar_usuarios(request):
-    # Si no existe la variable en sesión, lo mandamos directo al login
-    if 'usuario_id' not in request.session:
-        messages.error(request, "Debes iniciar sesión para acceder a esta sección.")
-        return redirect('login')
+    query = request.GET.get('q', '').strip()
+    
+    if query:
+        # Busca coincidencias tanto en el nombre como en el apellido
+        usuarios = Usuario.objects.filter(Q(nombre__icontains=query) | Q(apellido__icontains=query))
+    else:
+        usuarios = Usuario.objects.all()
         
-    usuarios = Usuario.objects.all()
     return render(request, 'usuarios/listar.html', {'usuarios': usuarios})
 
 # PANEL DE INICIO GENERAL
@@ -55,7 +60,13 @@ def index(request):
 # ==========================================
 @verificar_rol(['Admin'])
 def listar_discograficas(request):
-    items = Discografica.objects.all()
+    query = request.GET.get('q', '').strip()
+    
+    if query:
+        items = Discografica.objects.filter(nombre__icontains=query)
+    else:
+        items = Discografica.objects.all()
+        
     return render(request, 'discograficas/listar.html', {'items': items})
 
 @verificar_rol(['Admin'])
@@ -103,7 +114,13 @@ def eliminar_discografica(request, id):
 
 @verificar_rol(['Admin'])
 def listar_artistas(request):
-    items = Artista.objects.all()
+    query = request.GET.get('q', '').strip()
+    
+    if query:
+        items = Artista.objects.filter(nombreArtistico__icontains=query)
+    else:
+        items = Artista.objects.all()
+        
     return render(request, 'artistas/listar.html', {'items': items})
 
 @verificar_rol(['Admin'])
@@ -249,7 +266,13 @@ def eliminar_artista(request, id):
 # ==========================================
 @verificar_rol(['Admin'])
 def listar_albumes(request):
-    items = Album.objects.all()
+    query = request.GET.get('q', '').strip()
+    
+    if query:
+        items = Album.objects.filter(titulo__icontains=query)
+    else:
+        items = Album.objects.all()
+        
     return render(request, 'albumes/listar.html', {'items': items})
 
 @verificar_rol(['Admin'])
@@ -347,7 +370,13 @@ def eliminar_cancion(request, id):
 # ==========================================
 @verificar_rol(['Admin'])
 def listar_generos(request):
-    items = Genero.objects.all()
+    query = request.GET.get('q', '').strip()
+    
+    if query:
+        items = Genero.objects.filter(nombre__icontains=query)
+    else:
+        items = Genero.objects.all()
+        
     return render(request, 'generos/listar.html', {'items': items})
 
 @verificar_rol(['Admin'])
@@ -413,9 +442,6 @@ def eliminar_plan(request, id):
 # ==========================================
 # CRUD: USUARIOS
 # ==========================================
-def listar_usuarios(request):
-    usuarios = Usuario.objects.all()
-    return render(request, 'usuarios/listar.html', {'usuarios': usuarios})
 
 @verificar_rol(['Admin'])
 def crear_usuario(request):
