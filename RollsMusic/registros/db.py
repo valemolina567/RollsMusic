@@ -17,3 +17,5 @@ try:
     print("Conexión a MongoDB Atlas exitosa.")
 except Exception as e:
     print(f"Error conectando a MongoDB Atlas: {e}")
+    
+## Cambios instanciados
