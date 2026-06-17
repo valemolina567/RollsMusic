@@ -56,9 +56,10 @@ urlpatterns = [
     path('dashboard/usuario/', views.dashboard_usuario, name='dashboard_usuario'),
     path('dashboard/usuario/nueva-playlist/', views.crear_playlist_usuario, name='crear_playlist_usuario'),
     # --- NUEVAS RUTAS ASÍNCRONAS PARA GESTIÓN DE CANCIONES ---
-    path('playlist/detalles/<int:id_playlist>/', views.obtener_detalles_playlist, name='obtener_detalles_playlist'),
-    path('playlist/agregar/<int:id_playlist>/<int:id_cancion>/', views.agregar_cancion_playlist, name='agregar_cancion_playlist'),
-    
+    path('playlist/detalles/<str:id_playlist>/', views.obtener_detalles_playlist, name='detalles_playlist'),
+    path('playlist/agregar/<str:id_playlist>/<str:id_cancion>/', views.agregar_cancion_playlist, name='agregar_cancion_playlist'),
+    path('playlist/eliminar/<str:id_playlist>/', views.eliminar_playlist_mongo, name='eliminar_playlist_mongo'),
+        
     path('dashboard/usuario/pagar/', views.procesar_pago, name='procesar_pago'),
     path('dashboard/artista/', views.dashboard_artista, name='dashboard_artista'),
     path('dashboard/artista/nuevo-album/', views.crear_album_artista, name='crear_album_artista'), 
@@ -66,4 +67,4 @@ urlpatterns = [
     
     # TRIGGER DE REPRODUCCIONES
     path('cancion/reproducir/<int:id_cancion>/', views.registrar_reproduccion, name='registrar_reproduccion'),
-]
+]   
