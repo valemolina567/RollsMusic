@@ -226,8 +226,15 @@
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary fw-bold px-4" data-bs-dismiss="modal">Listo</button>
-                </div>
+                        <form id="formEliminarPlaylist" action="" method="POST" onsubmit="return confirm('¿Seguro que quieres eliminar esta playlist?');" class="me-auto">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-danger fw-bold">
+                                <i class="fas fa-trash-alt"></i> Eliminar Playlist
+                            </button>
+                        </form>
+
+                        <button type="button" class="btn btn-secondary fw-bold" data-bs-dismiss="modal">Cerrar</button>
+                    </div>
             </div>
         </div>
     </div>
@@ -313,6 +320,11 @@
                                 </div>`;
                         });
 
+                        // ====== LÍNEA NUEVA PARA ELIMINACIÓN ======
+                        // Asignar el ID correcto de MongoDB al formulario de eliminar
+                        document.getElementById('formEliminarPlaylist').action = `/playlist/eliminar/${data.id_playlist}/`;
+                        // ==========================================
+
                         // Desplegar ventana modal de forma limpia
                         const myModal = new bootstrap.Modal(document.getElementById('modalGestionPlaylist'));
                         myModal.show();
@@ -321,6 +333,7 @@
                     }
                 }).catch(() => mostrarError("Imposible procesar los metadatos de la playlist."));
         }
+
 
         // ACCIÓN ASÍNCRONA (+): Agrega pista a la tabla relacional sin parpadear la pantalla
         function inyectarCancionAPlaylist(id_cancion) {
