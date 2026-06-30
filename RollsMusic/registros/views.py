@@ -976,6 +976,29 @@ def eliminar_plan(request, id):
     return redirect('listar_planes')
     
 # ==========================================
+# SISTEMA DE AUTENTICACIÓN - MONGODB
+# ==========================================
+
+def login_view(request):
+    if 'usuario_id' in request.session:
+        rol_activo = request.session.get('usuario_rol', 'Cliente') 
+        if rol_activo == 'Admin':
+            return redirect('index') 
+        elif rol_activo == 'Artista':
+            return redirect('dashboard_artista')
+        else:
+            return redirect('dashboard_usuario')
+
+    if request.method == 'POST':
+        correo = request.POST.get('correo', '').strip()
+        password_ingresada = request.POST.get('contrasenia', '')
+
+        if not correo or not password_ingresada:
+            messages.error(request, 'Complete todos los campos.')
+            return render(request, 'login.html')
+
+        try:
+# ==========================================
 # SISTEMA DE AUTENTICACIÓN (100% MONGODB)
 # ==========================================
 def login_view(request):
@@ -997,41 +1020,36 @@ def login_view(request):
             return render(request, 'login.html')
 
         try:
-            usuario = db.usuarios.find_one({
-                "correo": correo,
-                "contrasenia": password_ingresada
-            })
-
+            usuario = db.usuarios.find_one({"correo": correo})
+            
             if usuario:
-                if usuario.get('estado') != 'Activo':
-                    messages.error(request, 'Cuenta inactiva.')
-                    return render(request, 'login.html')
-
-                request.session['usuario_id'] = str(usuario['_id'])
-                
-                rol_bd = usuario.get('rol', 'Cliente')
-                if rol_bd == 'Administrador':
-                    request.session['usuario_rol'] = 'Admin'
+                if usuario.get('contrasenia') == password_ingresada:
+                    
+                    if usuario.get('estado') != 'Activo':
+                        messages.error(request, f"Tu cuenta se encuentra: {usuario.get('estado')}. Contacta al administrador.")
+                        return render(request, 'auth/login.html')
+                    
+                    user_id = usuario.get('idUsuarioSQL') or str(usuario['_id']) 
+                    
+                    request.session['usuario_id'] = str(user_id)
+                    request.session['usuario_nombre'] = f"{usuario.get('nombre', '')} {usuario.get('apellido', '')}"
+                    request.session['usuario_rol'] = usuario.get('rol', 'Cliente')
+                    
+                    rol = usuario.get('rol', 'Cliente')
+                    if rol == 'Administrador' or rol == 'Admin':
+                        request.session['usuario_rol'] = 'Admin'
+                        return redirect('index')
+                    elif rol == 'Artista':
+                        return redirect('dashboard_artista')
+                    else:
+                        return redirect('dashboard_usuario')
                 else:
-                    request.session['usuario_rol'] = rol_bd
-
-                request.session['nombre'] = usuario.get('nombre', '')
-                request.session['apellido'] = usuario.get('apellido', '')
-
-                rol = request.session['usuario_rol']
-                
-                if rol == 'Admin':
-                    return redirect('index') 
-                elif rol == 'Artista':
-                    return redirect('dashboard_artista') 
-                else:
-                    return redirect('dashboard_usuario') 
-
+                    messages.error(request, "Contraseña incorrecta.")
             else:
-                messages.error(request, 'Credenciales incorrectas.')
-
+                messages.error(request, "El correo electrónico no está registrado.")
+                
         except Exception as e:
-            messages.error(request, f'Error BD: {str(e)}')
+            messages.error(request, f"Error al conectar con la base de datos: {str(e)}")
 
     return render(request, 'auth/login.html')
 
@@ -1081,7 +1099,6 @@ def logout_view(request):
     request.session.flush()
     messages.success(request, "Sesión cerrada correctamente.")
     return redirect('login')
-
 
 # ==========================================
 # DASHBOARDS E INTEGRACIÓN MONGODB
