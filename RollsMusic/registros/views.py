@@ -14,6 +14,10 @@ from bson.objectid import ObjectId # Para manejar los IDs alfanuméricos de Mong
 from datetime import datetime # Fundamental para las fechas automáticas
 from .db import db # Tu conexión de PyMongo
 
+import os
+from django.core.files.storage import FileSystemStorage
+from django.conf import settings
+
 def verificar_rol(roles_permitidos):
     """Decorador para restringir el acceso a vistas según el rol de la sesión."""
     def decorator(view_func):
@@ -120,16 +124,46 @@ def listar_artistas(request):
     query = request.GET.get('q', '').strip()
     
     if query:
-        items = Artista.objects.filter(nombreArtistico__icontains=query)
+        items = list(Artista.objects.filter(nombreArtistico__icontains=query))
     else:
-        items = Artista.objects.all()
+        items = list(Artista.objects.all())
         
+    # Mapeo de columnas dinámicas crudas para inyectarlas de forma segura en la vista
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'Catalogo' AND TABLE_NAME = 'Artista'")
+        art_cols = [row[0] for row in cursor.fetchall()]
+        
+        col_art_genero = 'genero' if 'genero' in art_cols else ('generoPrincipal' if 'generoPrincipal' in art_cols else None)
+        col_art_verificado = 'verificado' if 'verificado' in art_cols else None
+
+        for item in items:
+            item.genero_db = ""
+            item.verificado_db = False
+            
+            query_extra = "SELECT idArtista"
+            params_extra = []
+            if col_art_genero: query_extra += f", {col_art_genero}"
+            if col_art_verificado: query_extra += f", {col_art_verificado}"
+            query_extra += " FROM Catalogo.Artista WHERE idArtista = %s"
+            
+            cursor.execute(query_extra, [item.idArtista])
+            row = cursor.fetchone()
+            if row:
+                idx = 1
+                if col_art_genero:
+                    item.genero_db = row[idx] if row[idx] else ""
+                    idx += 1
+                if col_art_verificado:
+                    item.verificado_db = bool(row[idx])
+
     return render(request, 'artistas/listar.html', {'items': items})
 
+
+@verificar_rol(['Admin'])
 @verificar_rol(['Admin'])
 def crear_artista(request):
     discograficas = Discografica.objects.all()
-    generos = Genero.objects.all() # <-- 1. Recuperamos los géneros de la BD
+    generos = Genero.objects.all()
     
     if request.method == 'POST':
         nombre_artistico = request.POST.get('nombreArtistico')
@@ -138,19 +172,30 @@ def crear_artista(request):
         fecha_creacion = request.POST.get('fechaCreacion') or date.today()
         disco_id = request.POST.get('discografica')
         id_usuario = request.POST.get('usuario')
-        genero_form = request.POST.get('generoPrincipal') # <-- Capturamos el género seleccionado
+        genero_form = request.POST.get('generoPrincipal')
+        verificado_form = 1 if request.POST.get('verificado') else 0 
         
+        # --- LÓGICA PARA LA IMAGEN ---
+        nombre_imagen = 'default_artist.png'
+        if request.FILES.get('imagen'):
+            imagen_archivo = request.FILES['imagen']
+            fs = FileSystemStorage(location=os.path.join('static', 'images', 'artistas'))
+            # Guarda el archivo y previene duplicados renombrándolo si es necesario
+            filename = fs.save(imagen_archivo.name, imagen_archivo)
+            nombre_imagen = f"artistas/{filename}" # Se guardará como 'artistas/nombre.jpg'
+
         with connection.cursor() as cursor:
             try:
-                # Localizar las columnas reales de tu base de datos
                 cursor.execute("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'Catalogo' AND TABLE_NAME = 'Artista'")
                 art_cols = [row[0] for row in cursor.fetchall()]
+                
                 col_art_usuario = 'Usuario_idUsuario' if 'Usuario_idUsuario' in art_cols else ('idUsuario' if 'idUsuario' in art_cols else ('Usuario_id' if 'Usuario_id' in art_cols else None))
                 col_art_nombre = 'nombreArtistico' if 'nombreArtistico' in art_cols else ('nombre_artistico' if 'nombre_artistico' in art_cols else 'nombre')
                 col_art_genero = 'genero' if 'genero' in art_cols else ('generoPrincipal' if 'generoPrincipal' in art_cols else None)
+                col_art_verificado = 'verificado' if 'verificado' in art_cols else None
                 
                 cols = [col_art_nombre, 'pais', 'fechaCreacion', 'imagen', 'biografia', 'Discografica_idDiscografica']
-                vals = [nombre_artistico, pais, fecha_creacion, 'default_artist.png', biografia, disco_id]
+                vals = [nombre_artistico, pais, fecha_creacion, nombre_imagen, biografia, disco_id]
                 placeholders = ["%s"] * len(cols)
                 
                 if col_art_usuario and id_usuario:
@@ -158,19 +203,23 @@ def crear_artista(request):
                     vals.append(int(id_usuario))
                     placeholders.append("%s")
                 
-                # Si la columna de género existe, agregamos el texto seleccionado a la inserción SQL
                 if col_art_genero and genero_form:
                     cols.append(col_art_genero)
                     vals.append(genero_form)
                     placeholders.append("%s")
                     
+                if col_art_verificado:
+                    cols.append(col_art_verificado)
+                    vals.append(verificado_form)
+                    placeholders.append("%s")
+                    
                 sql_insert = f"INSERT INTO Catalogo.Artista ({', '.join(cols)}) VALUES ({', '.join(placeholders)})"
                 cursor.execute(sql_insert, vals)
                 
-                messages.success(request, f"Perfil artístico de '{nombre_artistico}' creado y vinculado correctamente.")
+                messages.success(request, f"Perfil de '{nombre_artistico}' creado con imagen correctamente.")
                 return redirect('listar_artistas')
             except Exception as e:
-                messages.error(request, f"Error de integridad en SQL Server: {str(e)}")
+                messages.error(request, f"Error en SQL Server: {str(e)}")
                 
     usuarios_artistas = Usuario.objects.filter(Rol_idRol__nombre='Artista')
     if not usuarios_artistas.exists():
@@ -179,14 +228,15 @@ def crear_artista(request):
     return render(request, 'artistas/crear.html', {
         'discograficas': discograficas,
         'usuarios_artistas': usuarios_artistas,
-        'generos': generos # <-- 2. Enviamos los géneros al contexto de creación
+        'generos': generos
     })
+
 
 @verificar_rol(['Admin'])
 def editar_artista(request, id):
     artista_obj = get_object_or_404(Artista, idArtista=id)
     discograficas = Discografica.objects.all()
-    generos = Genero.objects.all() # <-- 1. Recuperamos los géneros de la BD también para la edición
+    generos = Genero.objects.all()
     
     usuarios_artistas = Usuario.objects.filter(Rol_idRol__nombre='Artista')
     if not usuarios_artistas.exists():
@@ -194,6 +244,7 @@ def editar_artista(request, id):
 
     artista_usuario_id = None
     genero_actual = ""
+    es_verificado = False
     
     with connection.cursor() as cursor:
         cursor.execute("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'Catalogo' AND TABLE_NAME = 'Artista'")
@@ -201,10 +252,12 @@ def editar_artista(request, id):
         
         col_art_usuario = 'Usuario_idUsuario' if 'Usuario_idUsuario' in art_cols else ('idUsuario' if 'idUsuario' in art_cols else ('Usuario_id' if 'Usuario_id' in art_cols else None))
         col_art_genero = 'genero' if 'genero' in art_cols else ('generoPrincipal' if 'generoPrincipal' in art_cols else None)
+        col_art_verificado = 'verificado' if 'verificado' in art_cols else None
         
         query_extra = "SELECT idArtista"
         if col_art_usuario: query_extra += f", {col_art_usuario}"
         if col_art_genero: query_extra += f", {col_art_genero}"
+        if col_art_verificado: query_extra += f", {col_art_verificado}"
         query_extra += " FROM Catalogo.Artista WHERE idArtista = %s"
         
         cursor.execute(query_extra, [id])
@@ -216,21 +269,32 @@ def editar_artista(request, id):
                 idx += 1
             if col_art_genero:
                 genero_actual = row[idx] if row[idx] else ""
+                idx += 1
+            if col_art_verificado:
+                es_verificado = bool(row[idx])
 
     if request.method == 'POST':
         nombre_form = request.POST.get('nombreArtistico')
         biografia_form = request.POST.get('biografia', '')
-        pais_form = request.POST.get('pais', 'Desconocido')
         disco_id = request.POST.get('discografica')
         id_usuario = request.POST.get('usuario')
-        genero_form = request.POST.get('generoPrincipal') # <-- Ajustado para mantener congruencia de nombres
+        genero_form = request.POST.get('generoPrincipal')
+        verificado_form = 1 if request.POST.get('verificado') else 0
+
+        # --- ACTUALIZACIÓN DE IMAGEN ---
+        nombre_imagen = artista_obj.imagen # Por defecto mantiene la actual
+        if request.FILES.get('imagen'):
+            imagen_archivo = request.FILES['imagen']
+            fs = FileSystemStorage(location=os.path.join('static', 'images', 'artistas'))
+            filename = fs.save(imagen_archivo.name, imagen_archivo)
+            nombre_imagen = f"artistas/{filename}"
 
         with connection.cursor() as cursor:
             try:
                 col_art_nombre = 'nombre' if 'nombre' in art_cols else 'nombreArtistico'
                 
-                sql_update = f"UPDATE Catalogo.Artista SET {col_art_nombre} = %s, biografia = %s, Discografica_idDiscografica = %s"
-                params = [nombre_form, biografia_form, disco_id]
+                sql_update = f"UPDATE Catalogo.Artista SET {col_art_nombre} = %s, biografia = %s, Discografica_idDiscografica = %s, imagen = %s"
+                params = [nombre_form, biografia_form, disco_id, nombre_imagen]
                 
                 if col_art_usuario:
                     sql_update += f", {col_art_usuario} = %s"
@@ -238,12 +302,15 @@ def editar_artista(request, id):
                 if col_art_genero:
                     sql_update += f", {col_art_genero} = %s"
                     params.append(genero_form)
+                if col_art_verificado:
+                    sql_update += f", {col_art_verificado} = %s"
+                    params.append(verificado_form)
                     
                 sql_update += " WHERE idArtista = %s"
                 params.append(id)
                 
                 cursor.execute(sql_update, params)
-                messages.success(request, f"✨ Perfil de '{nombre_form}' actualizado correctamente.")
+                messages.success(request, f"Perfil de '{nombre_form}' actualizado correctamente.")
                 return redirect('listar_artistas')
             except Exception as e:
                 messages.error(request, f"Error al guardar en SQL Server: {str(e)}")
@@ -252,9 +319,10 @@ def editar_artista(request, id):
         'artista': artista_obj,
         'artista_usuario_id': artista_usuario_id,
         'genero_actual': genero_actual,
+        'es_verificado': es_verificado,
         'discograficas': discograficas,
         'usuarios_artistas': usuarios_artistas,
-        'generos': generos # <-- 2. Enviamos los géneros al contexto de edición
+        'generos': generos
     })
 
 @verificar_rol(['Admin'])
@@ -262,6 +330,7 @@ def eliminar_artista(request, id):
     item = get_object_or_404(Artista, idArtista=id)
     if request.method == 'POST':
         item.delete()
+        messages.success(request, "Artista eliminado con éxito.")
         return redirect('listar_artistas')
 
 # ==========================================
@@ -286,8 +355,19 @@ def crear_album(request):
         fecha = request.POST.get('fechaLanzamiento')
         artista_id = request.POST.get('artista')
         
+        # CAPTURAR LA IMAGEN SUBIDA
+        imagen = request.FILES.get('imagen') 
+        
         artista = get_object_or_404(Artista, idArtista=artista_id)
-        Album.objects.create(titulo=titulo, fechaLanzamiento=fecha, Artista_idArtista=artista, imagen='default_album.png')
+        
+        # SI NO SE SUBE IMAGEN, DJANGO ASIGNA AUTOMÁTICAMENTE EL DEFAULT SI ESTÁ CONFIGURADO EN EL MODELO.
+        # SI NO TIENES DEFAULT EN EL MODELO, PASAMOS LA VARIABLE DIRECTAMENTE.
+        Album.objects.create(
+            titulo=titulo, 
+            fechaLanzamiento=fecha, 
+            Artista_idArtista=artista, 
+            imagen=imagen if imagen else 'default_album.png' # Fallback manual
+        )
         return redirect('listar_albumes')
     return render(request, 'albumes/crear.html', {'artistas': artistas})
 
@@ -295,13 +375,24 @@ def crear_album(request):
 def editar_album(request, id):
     item = get_object_or_404(Album, idAlbum=id)
     artistas = Artista.objects.all()
+
     if request.method == 'POST':
         item.titulo = request.POST.get('titulo')
         item.fechaLanzamiento = request.POST.get('fechaLanzamiento')
         item.Artista_idArtista = get_object_or_404(Artista, idArtista=request.POST.get('artista'))
+        
+        # VALIDAR SI EL USUARIO SUBIÓ UNA NUEVA PORTADA
+        nueva_imagen = request.FILES.get('imagen')
+        if nueva_imagen:
+            item.imagen = nueva_imagen  # Solo se reemplaza si viene un archivo nuevo
+            
         item.save()
         return redirect('listar_albumes')
-    return render(request, 'albumes/editar.html', {'item': item, 'artistas': artistas})
+
+    return render(request, 'albumes/editar.html', {
+        'item': item,
+        'artistas': artistas
+    })
 
 @verificar_rol(['Admin'])
 def eliminar_album(request, id):
@@ -316,20 +407,23 @@ def eliminar_album(request, id):
 
 @verificar_rol(['Admin'])
 def listar_canciones(request):
-    query = request.GET.get('q', '').strip() # Captura lo que el usuario escribió
-    
+    query = request.GET.get('q', '').strip()
+
     if query:
-        # Filtra si el título contiene la palabra
         items = Cancion.objects.filter(titulo__icontains=query)
     else:
-        # Si no hay búsqueda, trae todo el inventario
         items = Cancion.objects.all()
-        
+
     return render(request, 'canciones/listar.html', {'items': items})
 
+
+# ------------------------------------------
+# CREAR CANCION (CON IMAGEN)
+# ------------------------------------------
 @verificar_rol(['Admin'])
 def crear_cancion(request):
     albumes = Album.objects.all()
+
     if request.method == 'POST':
         titulo = request.POST.get('titulo')
         duracion = request.POST.get('duracion')
@@ -338,32 +432,67 @@ def crear_cancion(request):
         calidad = request.POST.get('calidadAudio')
         album_id = request.POST.get('album')
 
+        # 👇 IMAGEN (IMPORTANTE)
+        imagen = request.FILES.get('imagen')
+
         album = get_object_or_404(Album, idAlbum=album_id)
+
         Cancion.objects.create(
-            titulo=titulo, duracion=duracion, numeroPista=pista,
-            fechaLanzamiento=fecha, calidadAudio=calidad, Album_idAlbum=album, imagen='default_track.png'
+            titulo=titulo,
+            duracion=duracion,
+            numeroPista=pista,
+            fechaLanzamiento=fecha,
+            calidadAudio=calidad,
+            Album_idAlbum=album,
+            imagen=imagen if imagen else 'canciones/default.png'
         )
+
         return redirect('listar_canciones')
+
     return render(request, 'canciones/crear.html', {'albumes': albumes})
 
+
+# ------------------------------------------
+# EDITAR CANCION (CON IMAGEN)
+# ------------------------------------------
 @verificar_rol(['Admin'])
 def editar_cancion(request, id):
     item = get_object_or_404(Cancion, idCancion=id)
     albumes = Album.objects.all()
+
     if request.method == 'POST':
+        fecha = request.POST.get('fechaLanzamiento')
+
         item.titulo = request.POST.get('titulo')
         item.duracion = request.POST.get('duracion')
         item.numeroPista = request.POST.get('numeroPista')
-        item.fechaLanzamiento = request.POST.get('fechaLanzamiento')
         item.calidadAudio = request.POST.get('calidadAudio')
         item.Album_idAlbum = get_object_or_404(Album, idAlbum=request.POST.get('album'))
+
+        # 🔥 protección contra NULL
+        if fecha:
+            item.fechaLanzamiento = fecha
+
+        # imagen opcional (si la tienes)
+        if request.FILES.get('imagen'):
+            item.imagen = request.FILES['imagen']
+
         item.save()
         return redirect('listar_canciones')
-    return render(request, 'canciones/editar.html', {'item': item, 'albumes': albumes})
 
+    return render(request, 'canciones/editar.html', {
+        'item': item,
+        'albumes': albumes
+    })
+
+
+# ------------------------------------------
+# ELIMINAR CANCION
+# ------------------------------------------
 @verificar_rol(['Admin'])
 def eliminar_cancion(request, id):
     item = get_object_or_404(Cancion, idCancion=id)
+
     if request.method == 'POST':
         item.delete()
         return redirect('listar_canciones')

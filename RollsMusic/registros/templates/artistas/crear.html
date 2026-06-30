@@ -12,14 +12,14 @@
         body { background-color: var(--rm-bg); color: var(--rm-text-primary); font-family: 'Segoe UI', sans-serif; padding-bottom: 50px; }
         .navbar-rm { background-color: var(--rm-surface); padding: 15px 30px; border-bottom: 1px solid #333; }
         .admin-card { background-color: var(--rm-surface); border-radius: 8px; border: 1px solid #333; padding: 30px; margin-top: 20px; }
-        
         .form-control, .form-select { background-color: #252525; border: 1px solid #444; color: #fff; }
         .form-control:focus, .form-select:focus { background-color: #2a2a2a; border-color: var(--rm-accent); color: #fff; box-shadow: 0 0 0 0.25px rgba(0, 174, 239, 0.25); }
         .form-label { color: var(--rm-text-secondary); font-weight: 600; font-size: 0.9rem; }
-        
+        .form-check-input { background-color: #252525; border-color: #555; }
+        .form-check-input:checked { background-color: var(--rm-accent); border-color: var(--rm-accent); }
+        .form-check-label { color: #fff; font-weight: 600; }
         .btn-volver { color: #E0E0E0; font-weight: 600; transition: color 0.2s; }
         .btn-volver:hover { color: var(--rm-accent); }
-
         .btn-rm-accent { background-color: var(--rm-accent); color: #000; font-weight: 700; border: none; }
         .btn-rm-accent:hover { background-color: #009cd4; color: #000; }
     </style>
@@ -46,7 +46,7 @@
                 </div>
             </div>
 
-            <form method="POST">
+            <form method="POST" enctype="multipart/form-data">
                 {% csrf_token %}
                 <div class="mb-3">
                     <label for="usuario" class="form-label">Seleccionar Usuario Cuenta</label>
@@ -76,6 +76,19 @@
                 <div class="mb-3">
                     <label for="biografia" class="form-label">Biografía (Opcional)</label>
                     <textarea name="biografia" id="biografia" class="form-control" rows="4" placeholder="Escribe una breve reseña o historia del artista..."></textarea>
+                </div>
+
+                <div class="mb-3">
+        <label for="imagen" class="form-label">Foto o Avatar del Artista</label>
+        <input type="file" name="imagen" id="imagen" class="form-control" accept="image/*">
+        <div class="form-text small text-info">Formatos sugeridos: JPG, PNG. Máximo 2MB.</div>
+    </div>
+
+                <div class="form-check mb-4">
+                    <input type="checkbox" name="verificado" id="verificado" class="form-check-input">
+                    <label class="form-check-label ms-1" for="verificado">
+                        <i class="bi bi-patch-check-fill text-info me-1"></i> Artista Verificado
+                    </label>
                 </div>
 
                 <div class="mb-4">

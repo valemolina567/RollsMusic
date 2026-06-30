@@ -13,20 +13,20 @@
         .text-muted { color: var(--rm-text-secondary) !important; }
         .navbar-rm { background-color: var(--rm-surface); padding: 15px 30px; border-bottom: 1px solid #333; }
         .admin-card { background-color: var(--rm-surface); border-radius: 8px; border: 1px solid #333; padding: 30px; margin-top: 20px; }
-        
         .table-rm { background-color: #252525; color: var(--rm-text-primary); border-color: #333; }
         .table-rm th { background-color: #1E1E1E; color: var(--rm-text-secondary); border-bottom: 2px solid #333; }
         .table-rm td { vertical-align: middle; border-color: #333; }
-        
         .btn-rm-accent { background-color: var(--rm-accent); color: #000; font-weight: 700; border: none; }
         .btn-rm-accent:hover { background-color: #009cd4; color: #000; }
+        /* Estilo personalizado para el avatar del artista */
+        .artist-avatar { width: 45px; height: 45px; object-fit: cover; border-radius: 50%; border: 1px solid #444; }
     </style>
 </head>
 <body>
     <nav class="navbar navbar-rm d-flex justify-content-between align-items-center">
         <a href="{% url 'index' %}" class="text-decoration-none d-flex align-items-center gap-2">
             <img src="{% static 'images/Logo.png' %}" alt="Icono RollsMusic" style="max-height: 45px; width: auto;">
-            <span class="fs-4 fw-bold text-white mb-0" style="letter-spacing: -0.5px;">RollsMusic</span>
+            <span class="fs-4 fw-bold text-white mb-0">RollsMusic</span>
         </a>
         <div class="d-flex align-items-center gap-3">
             <span class="badge bg-secondary rounded-pill px-3 fs-6">Módulo de Artistas</span>
@@ -35,6 +35,15 @@
     </nav>
 
     <div class="container mt-4">
+        {% if messages %}
+            {% for msg in messages %}
+                <div class="alert alert-{% if msg.tags == 'error' %}danger{% else %}{{ msg.tags }}{% endif %} alert-dismissible fade show bg-dark text-white border-secondary" role="alert">
+                    {{ msg }}
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            {% endfor %}
+        {% endif %}
+
         <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
             <div>
                 <h2 class="fw-bold mb-0 text-white"><i class="bi bi-mic text-info me-2"></i> Gestión de Artistas</h2>
@@ -45,7 +54,6 @@
             </a>
         </div>
 
-        <!-- Barra de Búsqueda de Artistas -->
         <div class="admin-card p-3 mb-4">
             <form method="GET" action="{% url 'listar_artistas' %}" class="row g-2 align-items-center">
                 <div class="col-10 col-md-11">
@@ -66,8 +74,8 @@
                     <thead>
                         <tr>
                             <th class="ps-4">ID</th>
+                            <th>Foto</th>
                             <th>Nombre Artístico</th>
-                            <th>Nombre Real (Usuario)</th>
                             <th>Género Principal</th>
                             <th class="text-center">Verificado</th>
                             <th>Discográfica</th>
@@ -78,22 +86,30 @@
                         {% for item in items %}
                         <tr>
                             <td class="ps-4 fw-bold text-muted">{{ item.idArtista }}</td>
+                            
+                            <td>
+                                {% if item.imagen %}
+                                    <img src="{% static 'images/' %}{{ item.imagen }}" alt="Avatar de {{ item.nombreArtistico }}" class="artist-avatar">
+                                {% else %}
+                                    <img src="{% static 'images/default_artist.png' %}" alt="Por defecto" class="artist-avatar">
+                                {% endif %}
+                            </td>
+
                             <td class="fw-bold text-white">
                                 {{ item.nombreArtistico }}
-                                {% if item.verificado %}
+                                {% if item.verificado_db %}
                                     <i class="bi bi-patch-check-fill text-info ms-1" title="Verificado"></i>
                                 {% endif %}
                             </td>
-                            <td>{{ item.Usuario_idUsuario.nombre }} {{ item.Usuario_idUsuario.apellido }}</td>
-                            <td><span class="badge bg-secondary text-dark fw-bold">{{ item.generoPrincipal }}</span></td>
+                            <td><span class="badge bg-secondary text-dark fw-bold">{{ item.genero_db|default:"No Asignado" }}</span></td>
                             <td class="text-center">
-                                {% if item.verificado %}
+                                {% if item.verificado_db %}
                                     <span class="badge bg-success-subtle text-success border border-success px-2.5">Sí</span>
                                 {% else %}
                                     <span class="badge bg-danger-subtle text-danger border border-danger px-2.5">No</span>
                                 {% endif %}
                             </td>
-                            <td><span class="badge bg-dark border border-secondary">{{ item.Discografica_idDiscografica.nombre }}</span></td>
+                            <td><span class="badge bg-dark border border-secondary">{{ item.Discografica_idDiscografica.nombre|default:"Independiente" }}</span></td>
                             <td class="text-center pe-4">
                                 <div class="d-inline-flex gap-2">
                                     <a href="{% url 'editar_artista' item.idArtista %}" class="btn btn-outline-info btn-sm">
@@ -118,5 +134,6 @@
             </div>
         </div>
     </div>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
