@@ -17,33 +17,38 @@ from .db import db # Tu conexión de PyMongo
 import os
 from django.core.files.storage import FileSystemStorage
 from django.conf import settings
+from django.shortcuts import redirect
 
 def verificar_rol(roles_permitidos):
-    """Decorador para restringir el acceso a vistas según el rol de la sesión."""
     def decorator(view_func):
         @wraps(view_func)
         def _wrapped_view(request, *args, **kwargs):
-            # 1. Validar si el usuario está autenticado en la sesión
-            if 'usuario_id' not in request.session:
+            # 1. Obtener el rol guardado en la sesión NoSQL de MongoDB
+            rol_usuario = request.session.get('usuario_rol')
+            
+            # Si no ha iniciado sesión, al login
+            if not request.session.get('usuario_id') or not rol_usuario:
                 messages.error(request, "Debes iniciar sesión para acceder a esta sección.")
                 return redirect('login')
             
-            # 2. Validar si su rol coincide con los permitidos
-            rol_usuario = request.session.get('usuario_rol')
-            if rol_usuario not in roles_permitidos:
-                messages.error(request, f"Acceso denegado. Tu rol de '{rol_usuario}' no tiene permisos para esta acción.")
-                
-                # Redirección inteligente según su rol actual
-                if rol_usuario == 'Artista':
+            # 2. Normalizar strings (quitar espacios y capitalizar) para evitar fallos de tipeo en la BD
+            rol_usuario_limpio = str(rol_usuario).strip().capitalize()
+            roles_permitidos_limpios = [str(r).strip().capitalize() for r in roles_permitidos]
+            
+            # 3. Validar si el rol actual está dentro de los permitidos para esta vista
+            if rol_usuario_limpio in roles_permitidos_limpios:
+                return view_func(request, *args, **kwargs)
+            else:
+                messages.error(request, f"No tienes permisos para acceder a esta sección con tu rol de {rol_usuario}.")
+                # Si es un artista queriendo entrar a una zona prohibida o viceversa, lo mandamos a su raíz correspondiente
+                if rol_usuario_limpio == 'Artista':
                     return redirect('dashboard_artista')
-                elif rol_usuario == 'Cliente':
-                    return redirect('dashboard_usuario')
+                elif rol_usuario_limpio == 'Admin':
+                    return redirect('index')
                 else:
-                    return redirect('login')
-                    
-            return view_func(request, *args, **kwargs)
+                    return redirect('dashboard_usuario')
         return _wrapped_view
-    return decorator    
+    return decorator
 
 @verificar_rol(['Admin'])
 def listar_usuarios(request):
@@ -673,30 +678,71 @@ def login_view(request):
             return render(request, 'auth/login.html')
 
         try:
-            # 1. Búsqueda en MongoDB en lugar de SQL Server
             usuario = db.usuarios.find_one({"correo": correo})
             
             if usuario:
-                # Validar contraseña
                 if usuario.get('contrasenia') == contrasenia:
-                    
                     if usuario.get('estado') != 'Activo':
                         messages.error(request, f"Tu cuenta se encuentra: {usuario.get('estado')}. Contacta al administrador.")
                         return render(request, 'auth/login.html')
                     
-                    # 2. Variables de sesión usando datos de Mongo
-                    # Usamos idUsuarioSQL si viene de la migración, o el _id alfanumérico si es nuevo
-                    user_id = usuario.get('idUsuarioSQL') or str(usuario['_id']) 
-                    
-                    request.session['usuario_id'] = user_id
+                    # 1. Obtener el ID original migrado o el nuevo _id
+                    user_id = usuario.get('idUsuarioSQL') or usuario.get('idUsuario') or str(usuario['_id']) 
+                    request.session['usuario_id'] = str(user_id)
                     request.session['usuario_nombre'] = f"{usuario.get('nombre', '')} {usuario.get('apellido', '')}"
-                    request.session['usuario_rol'] = usuario.get('rol', 'Cliente')
                     
-                    # 3. REDIRECCIÓN DINÁMICA POR ROL
-                    rol = usuario.get('rol', 'Cliente')
-                    if rol == 'Admin':
+                    # 2. Extraer rol explícito si lo hay
+                    rol_db = str(usuario.get('rol', '')).strip().capitalize()
+                    
+                    # Si el rol es numérico o no existe, verificar los campos clásicos de SQL
+                    id_rol = usuario.get('Rol_idRol') or usuario.get('idRol') or usuario.get('rol_id') or usuario.get('Rol_id')
+                    
+                    if not rol_db or rol_db == 'None':
+                        if id_rol == 1:
+                            rol_db = 'Admin'
+                        elif id_rol == 2:
+                            rol_db = 'Artista'
+                        else:
+                            rol_db = 'Cliente'
+                            
+                    # 3. VERIFICACIÓN EXPANSIVA: Búsqueda en la colección de artistas
+                    # Convertimos el ID a número por si la migración lo guardó como Int
+                    user_query_val = int(user_id) if str(user_id).isdigit() else str(user_id)
+                    
+                    es_artista = db.artistas.find_one({
+                        "$or": [
+                            {"idUsuario": user_query_val},
+                            {"idUsuario": str(user_id)},
+                            {"Usuario_idUsuario": user_query_val},
+                            {"usuario_id": user_query_val},
+                            {"Usuario_id": user_query_val},
+                            {"idUsuarioSQL": user_query_val}
+                        ]
+                    })
+                    
+                    if es_artista:
+                        rol_db = 'Artista'
+                        
+                    # ==========================================
+                    # 🐞 DEBUG: Imprimir en el CMD para rastrear el error
+                    # ==========================================
+                    print("\n" + "="*50)
+                    print(f"🔍 DEBUG LOGIN - USUARIO: {correo}")
+                    print(f"1. ID detectado (user_id): {user_id}")
+                    print(f"2. Rol numérico en BD (id_rol): {id_rol}")
+                    print(f"3. Rol en texto (rol_db): {rol_db}")
+                    print(f"4. ¿Se encontró en db.artistas?: {'SÍ ✅' if es_artista else 'NO ❌'}")
+                    if not es_artista:
+                        print("   -> El sistema te mandará al panel de usuario porque no halló tu perfil de artista.")
+                    print("="*50 + "\n")
+                    # ==========================================
+                        
+                    request.session['usuario_rol'] = rol_db
+                    
+                    # Redirección final
+                    if rol_db == 'Admin':
                         return redirect('index')
-                    elif rol == 'Artista':
+                    elif rol_db == 'Artista':
                         return redirect('dashboard_artista')
                     else:
                         return redirect('dashboard_usuario')
@@ -776,204 +822,281 @@ def dashboard_usuario(request):
     top_canciones, playlists_usuario = [], []
     auto_open_id = request.session.pop('auto_open_playlist_id', None)
     
-    with connection.cursor() as cursor:
-        try:
-            # Lista "Lo que más escuchas" siempre actualizada (Se mantiene consumiendo de SQL Server)
-            cursor.execute("EXEC Reportes.sp_TopCancionesUsuario %s", [usuario_id])
-            columns_top = [col[0] for col in cursor.description]
-            top_canciones = [dict(zip(columns_top, row)) for row in cursor.fetchall()]
-        except Exception:
-            pass
-
-    # ========================================================
-    # LECTURA MONGODB: Traer las playlists del usuario (READ)
-    # ========================================================
+    # 1. Determinar el formato del ID (soporte para cuentas nuevas y migradas)
     try:
-        # Buscamos en MongoDB todas las playlists vinculadas a este usuario
-        playlists_mongo = db.playlists.find({"idUsuarioSQL": usuario_id})
+        user_query = {"_id": ObjectId(usuario_id)}
+    except:
+        user_query = {"idUsuarioSQL": int(usuario_id)}
         
-        # Recorremos los resultados y los agregamos a la lista que irá al HTML
+    # 2. LECTURA DE PLAN: Extraer suscripción embebida en MongoDB
+    usuario = db.usuarios.find_one(user_query)
+    plan_info = {'plan_nombre': 'Free', 'suscripcion_estado': 'Inactiva'}
+    if usuario and 'suscripcion' in usuario:
+        plan_info = {
+            'plan_nombre': usuario['suscripcion'].get('plan', 'Free'),
+            'suscripcion_estado': usuario['suscripcion'].get('estado', 'Activa')
+        }
+
+    # 3. LECTURA MONGODB: Traer las playlists del usuario
+    try:
+        playlists_mongo = db.playlists.find({"$or": [{"idUsuarioSQL": usuario_id}, {"idUsuarioSQL": int(usuario_id) if str(usuario_id).isdigit() else usuario_id}]})
         for p in playlists_mongo:
             playlists_usuario.append((str(p['_id']), p.get('nombre', 'Sin nombre')))
     except Exception as e:
         print(f"Error al leer Playlists de Mongo: {e}")
-    # ========================================================
 
-    # Memoria de Sesión Completa para congelar la lista "Especialmente para ti"
+    # 4. AGGREGATION PIPELINE: "Lo que más escuchas" (Reemplaza a EXEC sp_TopCancionesUsuario)
+    try:
+        pipeline_top = [
+            {"$match": {"$or": [{"idUsuarioSQL": usuario_id}, {"idUsuarioSQL": int(usuario_id) if str(usuario_id).isdigit() else usuario_id}]}},
+            {"$group": {"_id": "$idCancionSQL", "reproducciones": {"$sum": 1}}},
+            {"$sort": {"reproducciones": -1}},
+            {"$limit": 5},
+            {"$lookup": {
+                "from": "canciones",
+                "localField": "_id",
+                "foreignField": "idCancionSQL", 
+                "as": "cancion_info"
+            }},
+            {"$unwind": "$cancion_info"}
+        ]
+        resultados_top = list(db.reproducciones.aggregate(pipeline_top))
+        for r in resultados_top:
+            c_info = r['cancion_info']
+            top_canciones.append({
+                'idCancion': c_info.get('idCancionSQL') or str(c_info['_id']),
+                'Cancion': c_info.get('titulo', 'Desconocido'),
+                'Artista': c_info.get('artista', {}).get('nombre', 'Desconocido'),
+                'Album': c_info.get('album', {}).get('titulo', 'Sencillo')
+            })
+    except Exception as e:
+        print(f"Error en Pipeline de Top Canciones: {e}")
+
+    # 5. RECOMENDACIONES MONGODB: (Reemplaza a EXEC sp_RecomendacionesPersonalizadas)
     recomendaciones = request.session.get('recomendaciones_cache')
     if not recomendaciones:
         recomendaciones = []
-        with connection.cursor() as cursor:
-            try:
-                cursor.execute("EXEC Reportes.sp_RecomendacionesPersonalizadas %s", [usuario_id])
-                columns_rec = [col[0] for col in cursor.description]
-                raw_recs = [dict(zip(columns_rec, row)) for row in cursor.fetchall()]
-                
-                for r in raw_recs:
-                    id_can = r.get('idCancion') or r.get('id_cancion') or r.get('id')
-                    tit_can = r.get('Cancion') or r.get('titulo')
-                    art_can = r.get('Artista') or r.get('nombreArtistico') or r.get('nombre')
-                    alb_can = r.get('Album') or r.get('album_titulo') or 'Sencillo'
-                    
-                    if id_can:
-                        recomendaciones.append({
-                            'idCancion': id_can, 'Cancion': tit_can, 'Artista': art_can, 'Album': alb_can
-                        })
-                request.session['recomendaciones_cache'] = recomendaciones
-            except Exception:
-                recomendaciones = []
-
-    plan_info = {'plan_nombre': 'Free', 'suscripcion_estado': 'Activa'}  # Plan base por defecto si no tiene registro
-    with connection.cursor() as cursor:
         try:
-            cursor.execute("""
-                SELECT TOP 1 P.nombre, S.estado 
-                FROM Facturacion.Suscripcion S
-                INNER JOIN Facturacion.PlanEntity P ON S.PlanEntity_idPlan = P.idPlan
-                WHERE S.Usuario_idUsuario = %s AND S.estado = 'Activa'
-                ORDER BY S.idSuscripcion DESC
-            """, [usuario_id])
-            plan_row = cursor.fetchone()
-            if plan_row:
-                plan_info = {'plan_nombre': plan_row[0], 'suscripcion_estado': plan_row[1]}
+            # Seleccionamos 5 pistas aleatorias del catálogo en Mongo con $sample
+            recs_mongo = db.canciones.aggregate([{"$sample": {"size": 5}}])
+            for c in recs_mongo:
+                recomendaciones.append({
+                    'idCancion': c.get('idCancionSQL') or str(c['_id']),
+                    'Cancion': c.get('titulo', 'Desconocido'),
+                    'Artista': c.get('artista', {}).get('nombre', 'Desconocido'),
+                    'Album': c.get('album', {}).get('titulo', 'Sencillo')
+                })
+            request.session['recomendaciones_cache'] = recomendaciones
         except Exception:
             pass
 
     context = {
         'top_canciones': top_canciones,
         'recomendaciones': recomendaciones,
-        'plan_info': plan_info,  # <-- Enviamos el plan real extraído de la BD
+        'plan_info': plan_info,
         'playlists': playlists_usuario,
         'auto_open_playlist_id': auto_open_id,
     }
-    return render(request, 'dashboards/usuario.html', context)  
+    return render(request, 'dashboards/usuario.html', context)
 
 @verificar_rol(['Artista', 'Admin'])
 def dashboard_artista(request):
     usuario_id = request.session.get('usuario_id')
     if not usuario_id:
         return redirect('login')
-        
-    artista = None
-    total_regalias = 0
-    minutos_cancion_demo = 0
-    canciones_artista = []
-    albums_artista = []
-    art_cols = []  
-    
-    with connection.cursor() as cursor:
-        try:
-            # 1. Inspeccionar columnas para blindaje de lógicas dinámicas
-            cursor.execute("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'Catalogo' AND TABLE_NAME = 'Artista'")
-            art_cols = [row[0] for row in cursor.fetchall()]
-            
-            col_art_nombre = 'nombreArtistico' if 'nombreArtistico' in art_cols else ('nombre_artistico' if 'nombre_artistico' in art_cols else 'nombre')
-            col_art_usuario = 'Usuario_idUsuario' if 'Usuario_idUsuario' in art_cols else ('idUsuario' if 'idUsuario' in art_cols else ('Usuario_id' if 'Usuario_id' in art_cols else 'idArtista'))
-            
-            cursor.execute("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'Catalogo' AND TABLE_NAME = 'Album'")
-            alb_cols = [row[0] for row in cursor.fetchall()]
-            col_alb_artista = 'Artista_idArtista' if 'Artista_idArtista' in alb_cols else ('idArtista' if 'idArtista' in alb_cols else 'Artista_id')
-            
-            cursor.execute("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'Catalogo' AND TABLE_NAME = 'Cancion'")
-            can_cols = [row[0] for row in cursor.fetchall()]
-            col_can_album = 'Album_idAlbum' if 'Album_idAlbum' in can_cols else ('idAlbum' if 'idAlbum' in can_cols else 'Album_id')
 
-            # --- EJECUCIÓN CON ENLACE DIRECTO ---
-            query_artista = f"SELECT idArtista, {col_art_nombre} FROM Catalogo.Artista WHERE {col_art_usuario} = %s"
-            cursor.execute(query_artista, [usuario_id])
-            artista_row = cursor.fetchone()
+    total_regalias = 0.0
+    minutos_cancion_demo = 0.0 # ¡Ajustado para el HTML!
+    albumes = []
+    canciones_artista = []
+    artista = None
+    nombre_artista = request.session.get('usuario_nombre')
+
+    try:
+        user_query = ObjectId(usuario_id) if len(str(usuario_id)) == 24 else int(usuario_id)
+        
+        artista = db.artistas.find_one({
+            "$or": [
+                {"idUsuario": user_query},
+                {"Usuario_idUsuario": user_query},
+                {"idUsuario": str(usuario_id)},
+                {"idUsuarioSQL": user_query}
+            ]
+        })
+        
+        if artista:
+            artista_id = artista.get('idArtistaSQL') or artista.get('idArtista') or str(artista['_id'])
+            nombre_artista = artista.get('nombreArtistico') or artista.get('nombre') or nombre_artista
+            artista['nombre'] = nombre_artista  
+        else:
+            artista = {
+                'nombreArtistico': nombre_artista,
+                'nombre': nombre_artista,
+                'pais': 'No especificado',
+                'biografia': 'Sin biografía'
+            }
+            artista_id = usuario_id
+
+        artista_query_val = int(artista_id) if str(artista_id).isdigit() else str(artista_id)
+
+        # -------------------------------------------------------------------
+        # 1. OBTENER ÁLBUMES
+        # -------------------------------------------------------------------
+        albumes = list(db.albumes.find({
+            "$or": [
+                {"idArtista": artista_query_val},
+                {"idArtista": str(artista_id)},
+                {"Artista_idArtista": artista_query_val},
+                {"idArtistaSQL": artista_query_val}
+            ]
+        }))
+
+        mapa_albumes = {}
+        ids_albumes = []
+        albums_artista_combo = [] # ¡Ajustado para el combo box del modal HTML!
+        
+        for a in albumes:
+            id_alb = a.get('idAlbumSQL') or a.get('idAlbum') or a.get('Album_idAlbum') or str(a['_id'])
+            if id_alb is not None:
+                ids_albumes.append(id_alb)
+                if str(id_alb).isdigit():
+                    ids_albumes.append(int(id_alb))
+                titulo_alb = a.get('titulo', 'Sencillo')
+                mapa_albumes[str(id_alb)] = titulo_alb
+                albums_artista_combo.append((str(id_alb), titulo_alb))
+
+        # -------------------------------------------------------------------
+        # 2. OBTENER CANCIONES
+        # -------------------------------------------------------------------
+        canciones_artista = list(db.canciones.find({
+            "$or": [
+                {"idArtista": artista_query_val},
+                {"idArtista": str(artista_id)},
+                {"Artista_idArtista": artista_query_val},
+                {"idAlbum": {"$in": ids_albumes}},
+                {"Album_idAlbum": {"$in": ids_albumes}},
+                {"idAlbumSQL": {"$in": ids_albumes}}
+            ]
+        }))
+
+        mapa_duraciones_safe = {}
+        ids_canciones = []
+
+        for cancion in canciones_artista:
+            id_alb_cancion = str(cancion.get('idAlbum') or cancion.get('Album_idAlbum') or cancion.get('idAlbumSQL'))
+            titulo_del_album = mapa_albumes.get(id_alb_cancion, "Sencillo")
             
-            if artista_row:
-                id_artista = artista_row[0]
-                artista = {'idArtista': id_artista, 'nombreArtistico': artista_row[1]}
-                
-                cursor.execute("SELECT Facturacion.fn_TotalRegaliaArtista(%s)", [id_artista])
-                regalias_row = cursor.fetchone()
-                total_regalias = regalias_row[0] if regalias_row and regalias_row[0] is not None else 0
-                
-                cursor.execute(f"""
-                    SELECT TOP 1 Usuarios.fn_MinutosReproduccionCancion(idCancion)
-                    FROM Catalogo.Cancion 
-                    WHERE {col_can_album} IN (SELECT idAlbum FROM Catalogo.Album WHERE {col_alb_artista} = %s)
-                """, [id_artista])
-                minutos_row = cursor.fetchone()
-                minutos_cancion_demo = minutos_row[0] if minutos_row and minutos_row[0] is not None else 0
-                
-                cursor.execute(f"""
-                    SELECT C.titulo, C.duracion, C.calidadAudio, A.titulo AS album_titulo 
-                    FROM Catalogo.Cancion C
-                    INNER JOIN Catalogo.Album A ON C.{col_can_album} = A.idAlbum
-                    WHERE A.{col_alb_artista} = %s
-                """, [id_artista])
-                raw_canciones = cursor.fetchall()
-                
-                canciones_artista = [
-                    {
-                        'titulo': r[0],
-                        'duracion': r[1],
-                        'calidadAudio': r[2],
-                        'Album_idAlbum': {'titulo': r[3]}
-                    } for r in raw_canciones
+            # --- Mapeos exactos para tu HTML ---
+            cancion['Album_idAlbum'] = {'titulo': titulo_del_album} 
+            
+            segs = cancion.get('duracionSegundos') or cancion.get('duracion') or 0
+            
+            # El HTML espera la variable 'duracion' cruda o formateada. La formateamos aquí y la llamamos 'duracion'
+            if isinstance(segs, int):
+                mins = segs // 60
+                rems = segs % 60
+                cancion['duracion'] = f"{mins}:{rems:02d}"
+            else:
+                cancion['duracion'] = "0:00"
+
+            idc = cancion.get('idCancionSQL') or cancion.get('idCancion') or cancion.get('Cancion_idCancion') or str(cancion['_id'])
+            if idc is not None:
+                ids_canciones.append(idc)
+                if str(idc).isdigit():
+                    ids_canciones.append(int(idc))
+                mapa_duraciones_safe[str(idc)] = segs
+
+        # -------------------------------------------------------------------
+        # 3. MÉTRICA 100% SEGURA: MINUTOS REPRODUCIDOS
+        # -------------------------------------------------------------------
+        if ids_canciones:
+            reproducciones = list(db.reproducciones.find({
+                "$or": [
+                    {"idCancionSQL": {"$in": ids_canciones}},
+                    {"idCancion": {"$in": ids_canciones}},
+                    {"Cancion_idCancion": {"$in": ids_canciones}}
                 ]
-                
-                cursor.execute(f"SELECT idAlbum, titulo FROM Catalogo.Album WHERE {col_alb_artista} = %s", [id_artista])
-                albums_artista = cursor.fetchall()
-                
-        except Exception as e:
-            messages.error(request, f"Error al interactuar con la Base de Datos: {str(e)}")
+            }))
+            
+            total_segs = 0
+            for rep in reproducciones:
+                id_c = rep.get('idCancionSQL') or rep.get('idCancion') or rep.get('Cancion_idCancion')
+                if id_c is not None:
+                    total_segs += mapa_duraciones_safe.get(str(id_c), 0)
+            
+            # ¡Se asigna a la variable que tu HTML espera!
+            minutos_cancion_demo = round(total_segs / 60, 2)
+
+        # -------------------------------------------------------------------
+        # 4. MÉTRICA 100% SEGURA: REGALÍAS TOTALES
+        # -------------------------------------------------------------------
+        regalias = list(db.regalias.find({
+            "$or": [
+                {"idArtista": {"$in": [artista_query_val, str(artista_id)]}},
+                {"Artista_idArtista": {"$in": [artista_query_val, str(artista_id)]}},
+                {"idArtistaSQL": {"$in": [artista_query_val, str(artista_id)]}},
+                {"artista.idArtista": {"$in": [artista_query_val, str(artista_id)]}}
+            ]
+        }))
+        
+        total_regalias = sum([float(r.get('monto', 0)) for r in regalias])
+        total_regalias = round(total_regalias, 2)
+
+    except Exception as e_general:
+        print(f"🚨 ERROR EN DASHBOARD ARTISTA: {str(e_general)}")
 
     context = {
-        'artista': artista,
+        'artista': artista,  
+        'artista_nombre': nombre_artista,
         'total_regalias': total_regalias,
-        'minutos_cancion_demo': minutos_cancion_demo,
-        'canciones_artista': canciones_artista,
-        'albums_artista': albums_artista,
-        'columnas_encontradas': art_cols,  # <-- Enviado para activar el panel de diagnóstico
+        'minutos_cancion_demo': minutos_cancion_demo, # ¡Variable ajustada!
+        'albums_artista': albums_artista_combo, # ¡Variable ajustada para el select!
+        'canciones_artista': canciones_artista
     }
     return render(request, 'dashboards/artista.html', context)
 
 @verificar_rol(['Cliente', 'Admin'])
 def procesar_pago(request):
-    if 'usuario_id' not in request.session:
+    usuario_id = request.session.get('usuario_id')
+    if not usuario_id:
         return redirect('login')
         
-    usuario_id = request.session['usuario_id']
-    
     if request.method == 'POST':
-        metodo = request.POST.get('metodo') # 'PayPal', 'Tarjeta' o 'Transferencia'
-        monto = 9.99  # Precio establecido para el plan Premium
+        metodo = request.POST.get('metodo') 
+        monto = 9.99 
         
-        with connection.cursor() as cursor:
-            # 1. Validar si el usuario ya cuenta con un registro de suscripción Premium (Plan 2)
-            cursor.execute("""
-                SELECT idSuscripcion FROM Facturacion.Suscripcion 
-                WHERE Usuario_idUsuario = %s AND PlanEntity_idPlan = 2
-            """, [usuario_id])
-            row = cursor.fetchone()
+        try:
+            # Soportar IDs nuevos y heredados de la migración
+            try:
+                user_query = {"_id": ObjectId(usuario_id)}
+            except:
+                user_query = {"idUsuarioSQL": int(usuario_id)}
+                
+            # 1. Actualizamos el estado del usuario usando $set
+            db.usuarios.update_one(
+                user_query,
+                {"$set": {
+                    "suscripcion.plan": "Premium",
+                    "suscripcion.estado": "Activa"
+                }}
+            )
             
-            if row:
-                id_suscripcion = row[0]
-                cursor.execute("UPDATE Facturacion.Suscripcion SET estado = 'Activa' WHERE idSuscripcion = %s", [id_suscripcion])
-            else:
-                # Crear una nueva suscripción Premium activa por 30 días
-                cursor.execute("""
-                    INSERT INTO Facturacion.Suscripcion (fechaInicio, fechaFin, estado, Usuario_idUsuario, PlanEntity_idPlan)
-                    VALUES (GETDATE(), DATEADD(day, 30, GETDATE()), 'Activa', %s, 2)
-                """, [usuario_id])
-                cursor.execute("SELECT @@IDENTITY")
-                id_suscripcion = cursor.fetchone()[0]
+            # 2. Insertamos el registro físico en MongoDB (Reemplaza al SP Facturacion.sp_RegistrarPago)
+            nuevo_pago = {
+                "idUsuario": usuario_id,
+                "monto": monto,
+                "metodo": metodo,
+                "fechaGeneracion": datetime.now(),
+                "estado": "Completado"
+            }
+            db.pagos.insert_one(nuevo_pago)
             
-            # 2. CONSUMO DE OBJETO PROGRAMABLE: Registrar el Pago ejecutando el SP
-            cursor.execute("""
-                EXEC Facturacion.sp_RegistrarPago 
-                    @monto = %s, 
-                    @metodo = %s, 
-                    @idSuscripcion = %s
-            """, [monto, metodo, id_suscripcion])
+            messages.success(request, "¡Transacción completada! Tu cuenta ha sido actualizada a Premium 💎")
+            return redirect('dashboard_usuario')
             
-        messages.success(request, "¡Transacción completada! Tu cuenta ha sido actualizada a Premium")
-        return redirect('dashboard_usuario')
-        
+        except Exception as e:
+            messages.error(request, f"Error al procesar el pago en MongoDB: {str(e)}")
+            
     return render(request, 'dashboards/facturacion.html')
 
 @verificar_rol(['Admin'])
@@ -1027,82 +1150,91 @@ def registrar_reproduccion(request, id_cancion):
 
 @verificar_rol(['Artista', 'Admin'])
 def crear_album_artista(request):
+    usuario_id = request.session.get('usuario_id')
     if request.method == 'POST':
-        titulo = request.POST.get('titulo', '').strip()
-        fecha_lanzamiento = request.POST.get('fecha_lanzamiento', '').strip()
-        usuario_id = request.session['usuario_id']
+        # Capturamos exactamente las variables de tu modal HTML
+        titulo = request.POST.get('titulo')
+        fecha_lanzamiento = request.POST.get('fecha_lanzamiento')
+        imagen = request.FILES.get('imagen')
         
-        with connection.cursor() as cursor:
-            try:
-                # Resolver columnas dinámicamente para el insert
-                cursor.execute("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'Catalogo' AND TABLE_NAME = 'Artista'")
-                art_cols = [row[0] for row in cursor.fetchall()]
-                col_art_usuario = 'Usuario_idUsuario' if 'Usuario_idUsuario' in art_cols else ('idUsuario' if 'idUsuario' in art_cols else ('Usuario_id' if 'Usuario_id' in art_cols else 'idArtista'))
-                
-                cursor.execute("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'Catalogo' AND TABLE_NAME = 'Album'")
-                alb_cols = [row[0] for row in cursor.fetchall()]
-                col_alb_artista = 'Artista_idArtista' if 'Artista_idArtista' in alb_cols else ('idArtista' if 'idArtista' in alb_cols else 'Artista_id')
+        user_query = ObjectId(usuario_id) if len(str(usuario_id)) == 24 else int(usuario_id)
+        artista = db.artistas.find_one({
+            "$or": [{"idUsuario": user_query}, {"Usuario_idUsuario": user_query}, {"idUsuario": str(usuario_id)}]
+        })
+        
+        artista_id = artista.get('idArtistaSQL') or artista.get('idArtista') or str(artista['_id']) if artista else usuario_id
+        
+        # Mantenemos la lógica de la imagen física intacta
+        imagen_nombre = "default_album.jpg"
+        if imagen:
+            fs = FileSystemStorage(location='media/albumes/')
+            filename = fs.save(imagen.name, imagen)
+            imagen_nombre = filename
 
-                cursor.execute(f"SELECT idArtista FROM Catalogo.Artista WHERE {col_art_usuario} = %s", [usuario_id])
-                artista_row = cursor.fetchone()
-                
-                if artista_row:
-                    id_artista = artista_row[0]
-                    cursor.execute(f"""
-                        INSERT INTO Catalogo.Album (titulo, fechaLanzamiento, imagen, {col_alb_artista})
-                        VALUES (%s, %s, 'album_default.png', %s)
-                    """, [titulo, fecha_lanzamiento, id_artista])
-                    messages.success(request, f"💿 El álbum '{titulo}' ha sido creado correctamente.")
-            except Exception as e:
-                messages.error(request, f"Error al crear álbum: {str(e)}")
-                
+        # -------------------------------------------------------------------
+        # ⚠️ ESTRUCTURA CORREGIDA (Formato Plano para match con Dashboard)
+        # -------------------------------------------------------------------
+        nuevo_album = {
+            "titulo": titulo,
+            "fechaLanzamiento": fecha_lanzamiento,
+            "imagen": imagen_nombre,
+            "idArtista": int(artista_id) if str(artista_id).isdigit() else artista_id
+        }
+        
+        try:
+            db.albumes.insert_one(nuevo_album)
+            messages.success(request, f"El álbum '{titulo}' ha sido añadido a tu discografía.")
+            return redirect('dashboard_artista')
+        except Exception as e:
+            messages.error(request, f"Error al registrar álbum: {e}")
+
     return redirect('dashboard_artista')
-
 
 @verificar_rol(['Artista', 'Admin'])
 def subir_cancion_artista(request):
+    usuario_id = request.session.get('usuario_id')
+    
+    user_query = ObjectId(usuario_id) if len(str(usuario_id)) == 24 else int(usuario_id)
+    artista = db.artistas.find_one({
+        "$or": [{"idUsuario": user_query}, {"Usuario_idUsuario": user_query}, {"idUsuario": str(usuario_id)}]
+    })
+    
+    artista_id = artista.get('idArtistaSQL') or artista.get('idArtista') or str(artista['_id']) if artista else usuario_id
+    
     if request.method == 'POST':
-        titulo = request.POST.get('titulo', '').strip()
-        duracion = request.POST.get('duracion', '').strip()
-        calidad = request.POST.get('calidadAudio', 'Alta')
+        # Capturamos exactamente las variables del modal HTML
+        titulo = request.POST.get('titulo')
+        duracion = request.POST.get('duracion')
+        # La variable de calidad se llama 'calidadAudio' en el HTML
+        calidad = request.POST.get('calidadAudio', 'Estándar') 
         album_id = request.POST.get('album_id')
         
-        with connection.cursor() as cursor:
-            try:
-                # 1. Resolver columna de relación en Canción de forma dinámica
-                cursor.execute("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'Catalogo' AND TABLE_NAME = 'Cancion'")
-                can_cols = [row[0] for row in cursor.fetchall()]
-                col_can_album = 'Album_idAlbum' if 'Album_idAlbum' in can_cols else ('idAlbum' if 'idAlbum' in can_cols else 'Album_id')
+        try:
+            # 1. Autocalcular el número de pista real
+            num_pista = db.canciones.count_documents({
+                "$or": [{"idAlbum": album_id}, {"idAlbum": int(album_id) if str(album_id).isdigit() else album_id}]
+            }) + 1
+            
+            # -------------------------------------------------------------------
+            # ⚠️ ESTRUCTURA CORREGIDA (Formato Plano para match con Dashboard)
+            # -------------------------------------------------------------------
+            nueva_cancion = {
+                "titulo": titulo,
+                "duracionSegundos": int(duracion) if duracion and duracion.isdigit() else 0, # Guardamos como duracionSegundos para los cálculos
+                "calidadAudio": calidad,
+                "numeroPista": num_pista,
+                "idArtista": int(artista_id) if str(artista_id).isdigit() else str(artista_id),
+                "idAlbum": int(album_id) if str(album_id).isdigit() else str(album_id)
+            }
+            
+            db.canciones.insert_one(nueva_cancion)
+            messages.success(request, f"¡La pista '{titulo}' se subió exitosamente!")
+            return redirect('dashboard_artista')
+            
+        except Exception as e:
+            messages.error(request, f"Error al subir canción: {e}")
 
-                # 2. CALCULAR NÚMERO DE PISTA AUTOMÁTICAMENTE
-                cursor.execute(f"SELECT COUNT(*) FROM Catalogo.Cancion WHERE {col_can_album} = %s", [album_id])
-                count_row = cursor.fetchone()
-                numero_pista = (count_row[0] + 1) if count_row else 1
-
-                # 3. HEREDAR LA FECHA DE LANZAMIENTO DEL ÁLBUM
-                cursor.execute("SELECT fechaLanzamiento FROM Catalogo.Album WHERE idAlbum = %s", [album_id])
-                album_row = cursor.fetchone()
-                
-                # 4. INSERT FINAL CORREGIDO: Se añade 'imagen', 'numeroPista' y 'fechaLanzamiento'
-                if album_row and album_row[0]:
-                    fecha_lanzamiento = album_row[0]
-                    cursor.execute(f"""
-                        INSERT INTO Catalogo.Cancion (titulo, duracion, calidadAudio, imagen, numeroPista, fechaLanzamiento, {col_can_album})
-                        VALUES (%s, %s, %s, 'track_default.png', %s, %s, %s)
-                    """, [titulo, duracion, calidad, numero_pista, fecha_lanzamiento, album_id])
-                else:
-                    # Plan B: Si el álbum no tiene fecha por algún motivo, usamos la fecha de hoy mediante SQL
-                    cursor.execute(f"""
-                        INSERT INTO Catalogo.Cancion (titulo, duracion, calidadAudio, imagen, numeroPista, fechaLanzamiento, {col_can_album})
-                        VALUES (%s, %s, %s, 'track_default.png', %s, GETDATE(), %s)
-                    """, [titulo, duracion, calidad, numero_pista, album_id])
-                
-                messages.success(request, f"🎵 La canción '{titulo}' se ha subido como la pista N° {numero_pista} del álbum.")
-            except Exception as e:
-                messages.error(request, f"Error al subir canción: {str(e)}")
-                
     return redirect('dashboard_artista')
-
 # ==========================================
 # CRUD MONGODB: PLAYLISTS (MÓDULO COMPLETO)
 # ==========================================
@@ -1139,29 +1271,30 @@ def crear_playlist_usuario(request):
 @verificar_rol(['Cliente', 'Admin'])
 def obtener_detalles_playlist(request, id_playlist):
     try:
-        # 1. Buscamos la playlist en MongoDB usando el ID alfanumérico
+        # 1. Buscamos la playlist en MongoDB
         playlist_mongo = db.playlists.find_one({"_id": ObjectId(id_playlist)})
         if not playlist_mongo:
             return JsonResponse({'status': 'error', 'message': 'Playlist no encontrada en Mongo.'}, status=404)
         
-        # 2. Extraemos los IDs de las canciones guardadas en el arreglo de Mongo
         canciones_array = playlist_mongo.get('canciones', [])
         ids_guardadas = [c.get('idCancionSQL') for c in canciones_array]
         
         canciones_guardadas = []
         todas_canciones = []
         
-        # 3. Buscamos los títulos de las canciones en el catálogo global de SQL
-        with connection.cursor() as cursor:
-            # Obtener todo el catálogo disponible
-            cursor.execute("SELECT idCancion, titulo FROM Catalogo.Cancion")
-            todas_canciones = [{'id': r[0], 'titulo': r[1]} for r in cursor.fetchall()]
+        # 2. Reemplazo del SELECT SQL: Buscamos en db.canciones de Mongo
+        catalogo = list(db.canciones.find({}, {"_id": 1, "idCancionSQL": 1, "titulo": 1}))
+        
+        for pista in catalogo:
+            # Respaldo por si el idCancionSQL no existe en las nuevas canciones subidas
+            pista_id = pista.get('idCancionSQL') or str(pista['_id'])
+            pista_dict = {'id': pista_id, 'titulo': pista.get('titulo', 'Sin título')}
             
-            # Obtener los títulos solo de las canciones que están en la playlist
-            if ids_guardadas:
-                format_strings = ','.join(['%s'] * len(ids_guardadas))
-                cursor.execute(f"SELECT idCancion, titulo FROM Catalogo.Cancion WHERE idCancion IN ({format_strings})", tuple(ids_guardadas))
-                canciones_guardadas = [{'id': r[0], 'titulo': r[1]} for r in cursor.fetchall()]
+            todas_canciones.append(pista_dict)
+            
+            # Si el ID está en el array de la playlist, lo marcamos como guardado
+            if pista_id in ids_guardadas or (isinstance(pista_id, int) and pista_id in ids_guardadas):
+                canciones_guardadas.append(pista_dict)
 
         return JsonResponse({
             'status': 'success', 
@@ -1171,7 +1304,6 @@ def obtener_detalles_playlist(request, id_playlist):
         })
     except Exception as e:
         return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
-
 
 @verificar_rol(['Cliente', 'Admin'])
 def agregar_cancion_playlist(request, id_playlist, id_cancion):
