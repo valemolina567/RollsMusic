@@ -21,19 +21,24 @@ def verificar_rol(roles_permitidos):
     def decorator(view_func):
         @wraps(view_func)
         def _wrapped_view(request, *args, **kwargs):
+            # 1. Obtener el rol guardado en la sesión NoSQL de MongoDB
             rol_usuario = request.session.get('usuario_rol')
             
+            # Si no ha iniciado sesión, al login
             if not request.session.get('usuario_id') or not rol_usuario:
                 messages.error(request, "Debes iniciar sesión para acceder a esta sección.")
                 return redirect('login')
             
+            # 2. Normalizar strings (quitar espacios y capitalizar) para evitar fallos de tipeo en la BD
             rol_usuario_limpio = str(rol_usuario).strip().capitalize()
             roles_permitidos_limpios = [str(r).strip().capitalize() for r in roles_permitidos]
             
+            # 3. Validar si el rol actual está dentro de los permitidos para esta vista
             if rol_usuario_limpio in roles_permitidos_limpios:
                 return view_func(request, *args, **kwargs)
             else:
                 messages.error(request, f"No tienes permisos para acceder a esta sección con tu rol de {rol_usuario}.")
+                # Si es un artista queriendo entrar a una zona prohibida o viceversa, lo mandamos a su raíz correspondiente
                 if rol_usuario_limpio == 'Artista':
                     return redirect('dashboard_artista')
                 elif rol_usuario_limpio == 'Admin':
@@ -976,29 +981,6 @@ def eliminar_plan(request, id):
     return redirect('listar_planes')
     
 # ==========================================
-# SISTEMA DE AUTENTICACIÓN - MONGODB
-# ==========================================
-
-def login_view(request):
-    if 'usuario_id' in request.session:
-        rol_activo = request.session.get('usuario_rol', 'Cliente') 
-        if rol_activo == 'Admin':
-            return redirect('index') 
-        elif rol_activo == 'Artista':
-            return redirect('dashboard_artista')
-        else:
-            return redirect('dashboard_usuario')
-
-    if request.method == 'POST':
-        correo = request.POST.get('correo', '').strip()
-        password_ingresada = request.POST.get('contrasenia', '')
-
-        if not correo or not password_ingresada:
-            messages.error(request, 'Complete todos los campos.')
-            return render(request, 'login.html')
-
-        try:
-# ==========================================
 # SISTEMA DE AUTENTICACIÓN (100% MONGODB)
 # ==========================================
 def login_view(request):
@@ -1115,6 +1097,7 @@ def dashboard_usuario(request):
     
     # 1. Búsqueda robusta del usuario actual
     try:
+        from bson.objectid import ObjectId
         user_query = {"_id": ObjectId(usuario_id)}
     except:
         user_query = {"idUsuarioSQL": int(usuario_id)}
@@ -1430,6 +1413,7 @@ def procesar_pago(request):
         
         try:
             try:
+                from bson.objectid import ObjectId
                 user_query = {"_id": ObjectId(usuario_id)}
             except:
                 user_query = {"idUsuarioSQL": int(usuario_id)}
@@ -1566,6 +1550,7 @@ def crear_album_artista(request):
     artista_id = artista.get('idArtistaSQL') or str(artista['_id'])
 
     if request.method == 'POST':
+        # Capturamos exactamente las variables del modal HTML
         titulo = request.POST.get('titulo')
         fecha_lanzamiento = request.POST.get('fecha_lanzamiento')
         imagen = request.FILES.get('imagen')
@@ -1576,22 +1561,24 @@ def crear_album_artista(request):
             filename = fs.save(imagen.name, imagen)
             imagen_nombre = filename
 
+        # -------------------------------------------------------------------
+        # ESTRUCTURA CORREGIDA (Formato Plano para match con Dashboard)
+        # -------------------------------------------------------------------
         nuevo_album = {
             "titulo": titulo,
             "fechaLanzamiento": fecha_lanzamiento,
             "imagen": imagen_nombre,
-            "idArtista": str(artista_id)
+            "idArtista": int(artista_id) if str(artista_id).isdigit() else artista_id
         }
 
         try:
             db.albumes.insert_one(nuevo_album)
-            messages.success(request, "Álbum añadido.")
+            messages.success(request, f"El álbum '{titulo}' ha sido añadido a tu discografía.")
             return redirect('dashboard_artista')
         except Exception as e:
             messages.error(request, f"Error al registrar álbum: {e}")
 
     return redirect('dashboard_artista')
-
 
 @verificar_rol(['Artista', 'Admin'])
 def _obtener_artista_de_sesion(request):
@@ -1672,6 +1659,10 @@ def subir_cancion_artista(request):
 
     return redirect('dashboard_artista')
 
+# ==========================================
+# CRUD MONGODB: PLAYLISTS (MÓDULO COMPLETO)
+# ==========================================
+
 @verificar_rol(['Cliente', 'Admin'])
 def crear_playlist_usuario(request):
     if request.method == 'POST':
@@ -1703,6 +1694,7 @@ def crear_playlist_usuario(request):
 @verificar_rol(['Cliente', 'Admin'])
 def obtener_detalles_playlist(request, id_playlist):
     try:
+        from bson.objectid import ObjectId
         playlist_mongo = db.playlists.find_one({"_id": ObjectId(id_playlist)})
         if not playlist_mongo:
             return JsonResponse({'status': 'error', 'message': 'No encontrada.'}, status=404)
