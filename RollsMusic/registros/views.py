@@ -660,7 +660,7 @@ def eliminar_usuario(request, id):
     return redirect('listar_usuarios')
     
 # ==========================================
-# SISTEMA DE AUTENTICACIÓN (LOGIN / LOGOUT)
+# SISTEMA DE AUTENTICACIÓN (LOGIN / LOGOUT) - MIGRADO A MONGODB 
 # ==========================================
 
 def login_view(request):
@@ -673,29 +673,40 @@ def login_view(request):
             return render(request, 'auth/login.html')
 
         try:
-            usuario = Usuario.objects.get(correo=correo)
+            # 1. Búsqueda en MongoDB en lugar de SQL Server
+            usuario = db.usuarios.find_one({"correo": correo})
             
-            if usuario.contrasenia == contrasenia:
-                if usuario.estado != 'Activo':
-                    messages.error(request, f"Tu cuenta se encuentra: {usuario.estado}. Contacta al administrador.")
-                    return render(request, 'auth/login.html')
-                
-                # Variables de sesión
-                request.session['usuario_id'] = usuario.idUsuario
-                request.session['usuario_nombre'] = f"{usuario.nombre} {usuario.apellido}"
-                request.session['usuario_rol'] = usuario.Rol_idRol.nombre
-                
-                # REDIRECCIÓN DINÁMICA POR ROL
-                if usuario.Rol_idRol.nombre == 'Admin':
-                    return redirect('index')
-                elif usuario.Rol_idRol.nombre == 'Artista':
-                    return redirect('dashboard_artista')
+            if usuario:
+                # Validar contraseña
+                if usuario.get('contrasenia') == contrasenia:
+                    
+                    if usuario.get('estado') != 'Activo':
+                        messages.error(request, f"Tu cuenta se encuentra: {usuario.get('estado')}. Contacta al administrador.")
+                        return render(request, 'auth/login.html')
+                    
+                    # 2. Variables de sesión usando datos de Mongo
+                    # Usamos idUsuarioSQL si viene de la migración, o el _id alfanumérico si es nuevo
+                    user_id = usuario.get('idUsuarioSQL') or str(usuario['_id']) 
+                    
+                    request.session['usuario_id'] = user_id
+                    request.session['usuario_nombre'] = f"{usuario.get('nombre', '')} {usuario.get('apellido', '')}"
+                    request.session['usuario_rol'] = usuario.get('rol', 'Cliente')
+                    
+                    # 3. REDIRECCIÓN DINÁMICA POR ROL
+                    rol = usuario.get('rol', 'Cliente')
+                    if rol == 'Admin':
+                        return redirect('index')
+                    elif rol == 'Artista':
+                        return redirect('dashboard_artista')
+                    else:
+                        return redirect('dashboard_usuario')
                 else:
-                    return redirect('dashboard_usuario')
+                    messages.error(request, "Contraseña incorrecta.")
             else:
-                messages.error(request, "Contraseña incorrecta.")
-        except Usuario.DoesNotExist:
-            messages.error(request, "El correo electrónico no está registrado.")
+                messages.error(request, "El correo electrónico no está registrado.")
+                
+        except Exception as e:
+            messages.error(request, f"Error al conectar con la base de datos: {str(e)}")
 
     return render(request, 'auth/login.html')
 
@@ -713,42 +724,38 @@ def registro_view(request):
             messages.error(request, "Por favor, completa todos los campos obligatorios.")
             return render(request, 'auth/registro.html')
 
-        # Asignamos una imagen por defecto, ya que es obligatoria en la base de datos
-        imagen_default = 'usuario_nuevo.png'
-        # El rol por defecto será 2 (Cliente)
-        rol_cliente = 2 
+        try:
+            # 2. Validar que el correo no exista ya en MongoDB
+            if db.usuarios.find_one({"correo": correo}):
+                messages.error(request, "Error: Este correo electrónico ya está en uso.")
+                return render(request, 'auth/registro.html')
+            
+            # 3. Construir el documento JSON (Con la suscripción embebida como en el Avance 5)
+            nuevo_usuario = {
+                "nombre": nombre,
+                "apellido": apellido,
+                "correo": correo,
+                "contrasenia": contrasenia,
+                "fechaNacimiento": fecha_nacimiento,
+                "fechaRegistro": datetime.now(),
+                "estado": "Activo",
+                "rol": "Cliente", # Rol por defecto
+                "imagen": "usuario_nuevo.png",
+                "suscripcion": {
+                    "plan": "Free",
+                    "estado": "Activa"
+                }
+            }
+            
+            # 4. Inserción directa en MongoDB (Reemplaza al SP de SQL)
+            db.usuarios.insert_one(nuevo_usuario)
+            
+            messages.success(request, "¡Cuenta creada con éxito! Ahora puedes iniciar sesión.")
+            return redirect('login')
+            
+        except Exception as e:
+            messages.error(request, f"Ocurrió un error en el servidor NoSQL: {str(e)}")
 
-        # 2. Ejecutar el Procedimiento Almacenado
-        with connection.cursor() as cursor:
-            try:
-                cursor.execute("""
-                    EXEC Usuarios.sp_RegistrarUsuario 
-                        @nombre = %s,
-                        @apellido = %s,
-                        @correo = %s,
-                        @contrasenia = %s,
-                        @imagen = %s,
-                        @fechaNacimiento = %s,
-                        @Rol_idRol = %s
-                """, [nombre, apellido, correo, contrasenia, imagen_default, fecha_nacimiento, rol_cliente])
-                
-                # El SP retorna: SELECT 1 AS Estado, 'Mensaje' AS Mensaje
-                resultado = cursor.fetchone()
-                
-                if resultado and resultado[0] == 1:
-                    # Registro exitoso
-                    messages.success(request, "¡Cuenta creada con éxito! Ahora puedes iniciar sesión.")
-                    return redirect('login')
-                else:
-                    # Error controlado desde el SP (ej. correo duplicado)
-                    error_msg = resultado[1] if resultado else "Error desconocido al registrar."
-                    messages.error(request, f"Error: {error_msg}")
-                    
-            except Exception as e:
-                # Error de ejecución o conexión
-                messages.error(request, f"Ocurrió un error en el servidor: {str(e)}")
-
-    # Si es método GET, solo mostramos el formulario vacío
     return render(request, 'auth/registro.html')
 
 # ==========================================

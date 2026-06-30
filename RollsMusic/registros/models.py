@@ -41,7 +41,7 @@ class Playlist(models.Model):
     privacidad = models.CharField(max_length=15, default='Privada')
     descripcion = models.CharField(max_length=255)
     colaborativa = models.BooleanField()
-    Usuario_idUsuario = models.ForeignKey('Usuario', db_column='Usuario_idUsuario', on_delete=models.CASCADE)
+    Usuario_idUsuario = models.OneToOneField('Usuario', db_column='Usuario_idUsuario', on_delete=models.CASCADE)
 
     class Meta:
         managed = False
