@@ -12,20 +12,14 @@
         body { background-color: var(--rm-bg); color: var(--rm-text-primary); font-family: 'Segoe UI', sans-serif; padding-bottom: 50px; }
         .navbar-rm { background-color: var(--rm-surface); padding: 15px 30px; border-bottom: 1px solid #333; }
         .admin-card { background-color: var(--rm-surface); border-radius: 8px; border: 1px solid #333; padding: 30px; margin-top: 20px; }
-        
         .form-control, .form-select { background-color: #252525; border: 1px solid #444; color: #fff; }
         .form-control:focus, .form-select:focus { background-color: #2a2a2a; border-color: var(--rm-accent); color: #fff; box-shadow: 0 0 0 0.25px rgba(0, 174, 239, 0.25); }
-        .form-control[readonly] { background-color: #1A1A1A; border-color: #333; color: #888; cursor: not-allowed; }
         .form-label { color: var(--rm-text-secondary); font-weight: 600; font-size: 0.9rem; }
-        
-        /* Estilización personalizada del Checkbox de Bootstrap para modo oscuro */
         .form-check-input { background-color: #252525; border-color: #555; }
         .form-check-input:checked { background-color: var(--rm-accent); border-color: var(--rm-accent); }
         .form-check-label { color: #fff; font-weight: 600; }
-
         .btn-volver { color: #E0E0E0; font-weight: 600; transition: color 0.2s; }
         .btn-volver:hover { color: var(--rm-accent); }
-
         .btn-rm-accent { background-color: var(--rm-accent); color: #000; font-weight: 700; border: none; }
         .btn-rm-accent:hover { background-color: #009cd4; color: #000; }
     </style>
@@ -52,11 +46,11 @@
                 </div>
             </div>
 
-            <form method="POST">
+            <form method="POST" enctype="multipart/form-data">
                 {% csrf_token %}
                 <div class="mb-3">
                     <label for="usuario" class="form-label">Usuario Asociado (Cuenta de Acceso)</label>
-                    <select name="usuario" id="usuario" class="form-select" style="background-color: #252525; color: white; border: 1px solid #444;">
+                    <select name="usuario" id="usuario" class="form-select">
                         <option value="">-- Seleccionar Cuenta de Usuario --</option>
                         {% for usu in usuarios_artistas %}
                             <option value="{{ usu.idUsuario }}" {% if usu.idUsuario == artista_usuario_id %}selected{% endif %}>
@@ -64,15 +58,14 @@
                             </option>
                         {% endfor %}
                     </select>
-                    <!-- CORRECCIÓN DE CONTRASTE: color inline para romper el camuflaje oscuro -->
                     <div class="form-text small mt-1" style="color: #00AEEF !important; font-weight: 600;">
-                        <i class="bi bi-info-circle-fill me-1"></i> Elige la cuenta con la que el artista iniciará sesión para ver su catálogo.
+                        <i class="bi bi-info-circle-fill me-1"></i> Elige la cuenta con la que el artista iniciará sesión.
                     </div>
                 </div>
 
                 <div class="mb-3">
                     <label for="nombreArtistico" class="form-label">Nombre Artístico</label>
-                    <input type="text" name="nombreArtistico" id="nombreArtistico" class="form-control" value="{{ item.nombreArtistico }}" required>
+                    <input type="text" name="nombreArtistico" id="nombreArtistico" class="form-control" value="{{ artista.nombreArtistico }}" required>
                 </div>
 
                 <div class="mb-3">
@@ -89,11 +82,11 @@
 
                 <div class="mb-3">
                     <label for="biografia" class="form-label">Biografía</label>
-                    <textarea name="biografia" id="biografia" class="form-control" rows="4">{{ item.biografia }}</textarea>
+                    <textarea name="biografia" id="biografia" class="form-control" rows="4">{{ artista.biografia }}</textarea>
                 </div>
 
                 <div class="form-check mb-4">
-                    <input type="checkbox" name="verificado" id="verificado" class="form-check-input" {% if item.verificado %}checked{% endif %}>
+                    <input type="checkbox" name="verificado" id="verificado" class="form-check-input" {% if es_verificado %}checked{% endif %}>
                     <label class="form-check-label ms-1" for="verificado">
                         <i class="bi bi-patch-check-fill text-info me-1"></i> Artista Verificado
                     </label>
@@ -103,12 +96,22 @@
                     <label for="discografica" class="form-label">Discográfica</label>
                     <select name="discografica" id="discografica" class="form-select" required>
                         {% for disco in discograficas %}
-                            <option value="{{ disco.idDiscografica }}" {% if disco.idDiscografica == item.Discografica_idDiscografica.idDiscografica %}selected{% endif %}>
+                            <option value="{{ disco.idDiscografica }}" {% if disco.idDiscografica == artista.Discografica_idDiscografica.idDiscografica %}selected{% endif %}>
                                 {{ disco.nombre }}
                             </option>
                         {% endfor %}
                     </select>
                 </div>
+
+                <div class="mb-4">
+        <label for="imagen" class="form-label">Actualizar Foto del Artista</label>
+        <div class="d-flex align-items-center gap-3 mb-2">
+            <img src="{% static 'images/' %}{{ artista.imagen }}" alt="Actual" class="rounded-circle border border-secondary" style="width: 60px; height: 60px; object-fit: cover;">
+            <div class="flex-grow-1">
+                <input type="file" name="imagen" id="imagen" class="form-control" accept="image/*">
+            </div>
+        </div>
+    </div>
 
                 <button type="submit" class="btn btn-rm-accent w-100 py-2.5 rounded text-uppercase tracking-wider">
                     <i class="bi bi-arrow-clockwise me-2"></i> Guardar Cambios

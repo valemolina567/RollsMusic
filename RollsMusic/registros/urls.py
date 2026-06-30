@@ -1,6 +1,9 @@
 from django.urls import path
 from . import views
 
+from django.conf import settings
+from django.conf.urls.static import static
+
 urlpatterns = [
     # Panel Principal
     path('', views.index, name='index'),
@@ -68,3 +71,6 @@ urlpatterns = [
     # TRIGGER DE REPRODUCCIONES
     path('cancion/reproducir/<int:id_cancion>/', views.registrar_reproduccion, name='registrar_reproduccion'),
 ]   
+
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

@@ -8,7 +8,7 @@ class Rol(models.Model):
     
     class Meta:
         managed = False
-        db_table = '[Usuarios].[Rol]'  # Ajusta el nombre exacto de tu esquema/tabla de roles si varía
+        db_table = '[Usuarios].[Rol]'  # zAjusta el nombre exacto de tu esquema/tabla de roles si varía
 
     def __str__(self):
         return self.nombre
@@ -76,11 +76,13 @@ class Discografica(models.Model):
         return self.nombre
 
 
+from django.db import models
+
 class Artista(models.Model):
     idArtista = models.AutoField(primary_key=True)
-    nombreArtistico = models.CharField(max_length=50, db_column='nombre')  # En tu SQL se llama 'nombre'
+    nombreArtistico = models.CharField(max_length=50, db_column='nombre')  # En SQL Server se llama 'nombre'
     pais = models.CharField(max_length=50)
-    fechaCreacion = models.DateField()
+    fechaCreation = models.DateField(db_column='fechaCreacion')
     imagen = models.CharField(max_length=255, default='default_artist.png')
     biografia = models.CharField(max_length=500)
     Discografica_idDiscografica = models.ForeignKey('Discografica', db_column='Discografica_idDiscografica', on_delete=models.PROTECT)
@@ -92,13 +94,12 @@ class Artista(models.Model):
     def __str__(self):
         return self.nombreArtistico
 
-
 class Album(models.Model):
     idAlbum = models.AutoField(primary_key=True)
     titulo = models.CharField(max_length=100)
     fechaLanzamiento = models.DateField()
     Artista_idArtista = models.ForeignKey(Artista, db_column='Artista_idArtista', on_delete=models.CASCADE)
-    imagen = models.CharField(max_length=255)
+    imagen = models.ImageField(upload_to='albumes/', default='albumes/default_album.png')
 
     class Meta:
         managed = False
@@ -117,6 +118,7 @@ class Cancion(models.Model):
     calidadAudio = models.CharField(max_length=20, default='Alta')
     Album_idAlbum = models.ForeignKey(Album, db_column='Album_idAlbum', on_delete=models.CASCADE)
     imagen = models.CharField(max_length=255)
+    imagen = models.ImageField(upload_to='canciones/', null=True, blank=True, default='canciones/default.png')
 
     class Meta:
         managed = False
