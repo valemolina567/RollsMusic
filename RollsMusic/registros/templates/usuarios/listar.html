@@ -97,17 +97,17 @@
                             </td>
                             <td class="text-center pe-4">
                                 <div class="d-inline-flex gap-2">
-                                    <a href="{% url 'editar_usuario' usuario.idUsuario %}" class="btn btn-outline-info btn-sm">
+                                    <a href="{% url 'editar_usuario' usuario.id_mongo %}" class="btn btn-outline-info btn-sm">
                                         <i class="bi bi-pencil-square"></i> Editar
                                     </a>
-                                    <form action="{% url 'eliminar_usuario' usuario.idUsuario %}" method="POST" onsubmit="return confirm('¿Seguro que deseas eliminar permanentemente a este usuario?');">
+                                    
+                                    <form action="{% url 'eliminar_usuario' usuario.id_mongo %}" method="POST" onsubmit="return confirm('¿Seguro que deseas eliminar permanentemente a este usuario?');">
                                         {% csrf_token %}
                                         <button type="button" 
                                         class="btn btn-danger btn-sm btn-eliminar-usuario" 
-                                        data-url="{% url 'eliminar_usuario' usuario.idUsuario %}"
-                                        data-nombre="{{ usuario.nombre }} {{ usuario.apellido }}">
+                                        data-url="{% url 'eliminar_usuario' usuario.id_mongo %}" data-nombre="{{ usuario.nombre }} {{ usuario.apellido }}">
                                         <i class="bi bi-trash-fill"></i> Eliminar
-</button>
+                                        </button>
                                     </form>
                                 </div>
                             </td>

@@ -50,22 +50,144 @@ def verificar_rol(roles_permitidos):
         return _wrapped_view
     return decorator
 
+# ==========================================
+# CRUD: USUARIOS (100% MONGODB)
+# ==========================================
+
 @verificar_rol(['Admin'])
 def listar_usuarios(request):
     query = request.GET.get('q', '').strip()
     
+    # 1. Filtro de búsqueda NoSQL (Reemplaza a Q() de Django)
+    filtro = {}
     if query:
-        # Busca coincidencias tanto en el nombre como en el apellido
-        usuarios = Usuario.objects.filter(Q(nombre__icontains=query) | Q(apellido__icontains=query))
-    else:
-        usuarios = Usuario.objects.all()
+        filtro = {
+            "$or": [
+                {"nombre": {"$regex": query, "$options": "i"}},
+                {"apellido": {"$regex": query, "$options": "i"}}
+            ]
+        }
         
-    return render(request, 'usuarios/listar.html', {'usuarios': usuarios})
+    # 2. Consultamos directamente a la colección db.usuarios
+    usuarios_mongo = list(db.usuarios.find(filtro))
+    
+    # 3. Preparamos el diccionario para que el HTML no se rompa
+    for u in usuarios_mongo:
+        # Extraemos el ID como string para pasarlo a los botones de Editar/Eliminar
+        u['id_mongo'] = str(u['_id'])
+        # Conservamos el ID visual de SQL si existe, sino usamos parte del Object ID
+        u['idUsuario'] = u.get('idUsuarioSQL') or str(u['_id'])[-6:].upper()
+        # Valores por defecto para evitar errores en vista
+        u['nombre'] = u.get('nombre', 'Sin nombre')
+        u['apellido'] = u.get('apellido', '')
+        u['correo'] = u.get('correo', 'Sin correo')
+        u['estado'] = u.get('estado', 'Inactivo')
+        u['rol_nombre'] = u.get('rol', 'Cliente') # Antes era u.Rol_idRol.nombre
+        
+    return render(request, 'usuarios/listar.html', {'usuarios': usuarios_mongo})
 
-# PANEL DE INICIO GENERAL
+@verificar_rol(['Admin'])
+def crear_usuario(request):
+    if request.method == 'POST':
+        nombre = request.POST.get('nombre', '').strip()
+        apellido = request.POST.get('apellido', '').strip()
+        correo = request.POST.get('correo', '').strip()
+        fecha_nacimiento = request.POST.get('fechaNacimiento', '').strip()
+        contrasenia = request.POST.get('contrasenia', '').strip()
+        # Obtenemos el texto directo del rol en lugar de un ID relacional
+        rol = request.POST.get('rol', 'Cliente') 
+
+        # Validación rápida de correo duplicado en MongoDB
+        if db.usuarios.find_one({"correo": correo}):
+            messages.error(request, "Error: Este correo ya se encuentra registrado.")
+            return redirect('crear_usuario')
+
+        # Documento BSON para insertar
+        nuevo_usuario = {
+            "nombre": nombre,
+            "apellido": apellido,
+            "correo": correo,
+            "contrasenia": contrasenia,
+            "fechaNacimiento": fecha_nacimiento,
+            "fechaRegistro": datetime.now(),
+            "estado": "Activo",
+            "imagen": "default.png",
+            "rol": rol,
+            "suscripcion": {"plan": "Free", "estado": "Activa"}
+        }
+        
+        db.usuarios.insert_one(nuevo_usuario)
+        messages.success(request, f"Usuario {nombre} {apellido} creado correctamente en MongoDB.")
+        return redirect('listar_usuarios')
+    
+    # Lista estática de roles para cargar en el <select>
+    roles = [{'nombre': 'Administrador'}, {'nombre': 'Artista'}, {'nombre': 'Cliente'}]
+    return render(request, 'usuarios/crear.html', {'roles': roles})
+
+@verificar_rol(['Admin'])
+def editar_usuario(request, id):
+    # Soporta tanto IDs de MongoDB como los viejos de SQL
+    filtro = {"_id": ObjectId(id)} if len(str(id)) == 24 else {"idUsuarioSQL": int(id)}
+    usuario = db.usuarios.find_one(filtro)
+    
+    if request.method == 'POST':
+        db.usuarios.update_one(filtro, {
+            "$set": {
+                "nombre": request.POST.get('nombre', '').strip(),
+                "apellido": request.POST.get('apellido', '').strip(),
+                "correo": request.POST.get('correo', '').strip(),
+                "estado": request.POST.get('estado', '').strip(),
+                "rol": request.POST.get('rol', usuario.get('rol')),
+                "fechaNacimiento": request.POST.get('fechaNacimiento', usuario.get('fechaNacimiento'))
+            }
+        })
+        messages.success(request, "El perfil ha sido actualizado exitosamente en MongoDB.")
+        return redirect('listar_usuarios')
+        
+    roles = [{'nombre': 'Administrador'}, {'nombre': 'Artista'}, {'nombre': 'Cliente'}]
+    usuario['idUsuario'] = str(usuario['_id']) # Requerido para la url del action del formulario
+    usuario['rol_nombre'] = usuario.get('rol')
+    
+    return render(request, 'usuarios/editar.html', {'usuario': usuario, 'roles': roles})
+
+@verificar_rol(['Admin'])
+def eliminar_usuario(request, id):
+    try:
+        filtro = {"_id": ObjectId(id)} if len(str(id)) == 24 else {"idUsuarioSQL": int(id)}
+        db.usuarios.delete_one(filtro)
+        messages.success(request, "Usuario eliminado correctamente de la plataforma NoSQL.")
+    except Exception as e:
+        messages.error(request, f"Error en MongoDB: {str(e)}")
+    
+    return redirect('listar_usuarios')
+
 @verificar_rol(['Admin'])
 def index(request):
-    return render(request, 'index.html')
+    """
+    Panel principal del Administrador.
+    Calcula los totales ultra rápidos usando PyMongo.
+    """
+    try:
+        # Reemplazamos los Modelo.objects.count() por count_documents de Mongo
+        total_usuarios = db.usuarios.count_documents({})
+        total_artistas = db.artistas.count_documents({})
+        total_albumes = db.albumes.count_documents({})
+        total_canciones = db.canciones.count_documents({})
+
+        context = {
+            'total_usuarios': total_usuarios,
+            'total_artistas': total_artistas,
+            'total_albumes': total_albumes,
+            'total_canciones': total_canciones,
+        }
+    except Exception as e:
+        # Valores por defecto en caso de fallo de conexión
+        context = {
+            'total_usuarios': 0, 'total_artistas': 0,
+            'total_albumes': 0, 'total_canciones': 0,
+        }
+        
+    return render(request, 'index.html', context)
 
 # ==========================================
 # CRUD: DISCOGRAFICAS
@@ -575,184 +697,76 @@ def eliminar_plan(request, id):
     if request.method == 'POST':
         item.delete()
         return redirect('listar_planes')
-
-# ==========================================
-# CRUD: USUARIOS
-# ==========================================
-
-@verificar_rol(['Admin'])
-def crear_usuario(request):
-    if request.method == 'POST':
-        nombre = request.POST.get('nombre', '').strip()
-        apellido = request.POST.get('apellido', '').strip()
-        correo = request.POST.get('correo', '').strip()
-        fecha_nacimiento = request.POST.get('fechaNacimiento', '').strip()
-        contrasenia = request.POST.get('contrasenia', '').strip()
-        rol_id = request.POST.get('rol', 2) 
-
-        errores = []
-        if not nombre: errores.append("El nombre es obligatorio")
-        if not apellido: errores.append("El apellido es obligatorio")
-        if not correo: errores.append("El correo es obligatorio")
-        if not contrasenia: errores.append("La contraseña es obligatoria")
-        
-        fecha_nacimiento_dt = None
-        if not fecha_nacimiento:
-            errores.append("La fecha de nacimiento es obligatoria")
-        else:
-            try: fecha_nacimiento_dt = date.fromisoformat(fecha_nacimiento)
-            except ValueError: errores.append("La fecha de nacimiento no tiene un formato válido (YYYY-MM-DD)")
-        
-        if errores:
-            for e in errores: messages.error(request, e)
-            return render(request, 'usuarios/crear.html')
-        
-        rol_obj = get_object_or_404(Rol, idRol=rol_id)
-
-        Usuario.objects.create(
-            nombre=nombre, apellido=apellido, correo=correo, contrasenia=contrasenia,
-            fechaRegistro=date.today(), estado='Activo', imagen='default.png', 
-            fechaNacimiento=fecha_nacimiento_dt,
-            Rol_idRol=rol_obj 
-        )
-        messages.success(request, "Usuario creado correctamente")
-        return redirect('listar_usuarios') # Corregido: apuntaba a 'listar' y tu vista se llama 'listar_usuarios'
-    
-    roles = Rol.objects.all()
-    return render(request, 'usuarios/crear.html', {'roles': roles})
-
-@verificar_rol(['Admin'])
-def editar_usuario(request, id):
-    usuario = get_object_or_404(Usuario, idUsuario=id)
-    roles = Rol.objects.all() 
-    
-    if request.method == 'POST':
-        usuario.nombre = request.POST.get('nombre', '').strip()
-        usuario.apellido = request.POST.get('apellido', '').strip()
-        usuario.correo = request.POST.get('correo', '').strip()
-        usuario.estado = request.POST.get('estado', '').strip()
-        
-        if request.POST.get('fechaNacimiento'):
-            usuario.fechaNacimiento = request.POST.get('fechaNacimiento')
-            
-        id_rol = request.POST.get('rol')
-        if id_rol:
-            usuario.Rol_idRol_id = int(id_rol)
-            
-        usuario.save()
-        
-        # CONFIRMACIÓN VISUAL: Agregamos una notificación de éxito
-        messages.success(request, f"El perfil de '{usuario.nombre} {usuario.apellido}' ha sido actualizado exitosamente.")
-        return redirect('listar_usuarios')
-        
-    return render(request, 'usuarios/editar.html', {
-        'usuario': usuario,
-        'roles': roles
-    })
-
-@verificar_rol(['Admin'])
-def eliminar_usuario(request, id):
-    usuario = get_object_or_404(Usuario, idUsuario=id)
-    # Quitamos el "if request.method == 'POST'" para que acepte el viaje directo de SweetAlert2
-    try:
-        usuario.delete()
-        messages.success(request, "Usuario eliminado correctamente de la plataforma.")
-    except Exception as e:
-        # SQL Server frenará el borrado si el usuario tiene playlists, reproducciones, etc.
-        messages.error(request, "No se pudo eliminar el usuario debido a dependencias activas en la base de datos.")
-    
-    # Este return ahora sí se ejecuta siempre, sin importar si es GET o POST
-    return redirect('listar_usuarios')
     
 # ==========================================
 # SISTEMA DE AUTENTICACIÓN (LOGIN / LOGOUT) - MIGRADO A MONGODB 
 # ==========================================
 
 def login_view(request):
+    """
+    Controlador global de autenticación para Proyecto RollsMusic utilizando MongoDB (PyMongo).
+    """
+    
+    # 1. CONTROL ANTIBUCLE CORREGIDO
+    if 'usuario_id' in request.session:
+        # Ahora usamos 'usuario_rol' para coincidir con tu decorador
+        rol_activo = request.session.get('usuario_rol', 'Cliente') 
+        if rol_activo == 'Admin':
+            return redirect('index') # Tu vista de admin se llama 'index'
+        elif rol_activo == 'Artista':
+            return redirect('dashboard_artista')
+        else:
+            return redirect('dashboard_usuario')
+
     if request.method == 'POST':
         correo = request.POST.get('correo', '').strip()
-        contrasenia = request.POST.get('contrasenia', '').strip()
+        
+        # 2. COINCIDENCIA EXACTA CON EL HTML ('contrasenia')
+        password_ingresada = request.POST.get('contrasenia', '')
 
-        if not correo or not contrasenia:
-            messages.error(request, "Por favor, completa todos los campos.")
-            return render(request, 'auth/login.html')
+        if not correo or not password_ingresada:
+            messages.error(request, 'Por favor, complete todos los campos.')
+            return render(request, 'login.html')
 
         try:
-            usuario = db.usuarios.find_one({"correo": correo})
-            
+            usuario = db.usuarios.find_one({
+                "correo": correo,
+                "contrasenia": password_ingresada
+            })
+
             if usuario:
-                if usuario.get('contrasenia') == contrasenia:
-                    if usuario.get('estado') != 'Activo':
-                        messages.error(request, f"Tu cuenta se encuentra: {usuario.get('estado')}. Contacta al administrador.")
-                        return render(request, 'auth/login.html')
-                    
-                    # 1. Obtener el ID original migrado o el nuevo _id
-                    user_id = usuario.get('idUsuarioSQL') or usuario.get('idUsuario') or str(usuario['_id']) 
-                    request.session['usuario_id'] = str(user_id)
-                    request.session['usuario_nombre'] = f"{usuario.get('nombre', '')} {usuario.get('apellido', '')}"
-                    
-                    # 2. Extraer rol explícito si lo hay
-                    rol_db = str(usuario.get('rol', '')).strip().capitalize()
-                    
-                    # Si el rol es numérico o no existe, verificar los campos clásicos de SQL
-                    id_rol = usuario.get('Rol_idRol') or usuario.get('idRol') or usuario.get('rol_id') or usuario.get('Rol_id')
-                    
-                    if not rol_db or rol_db == 'None':
-                        if id_rol == 1:
-                            rol_db = 'Admin'
-                        elif id_rol == 2:
-                            rol_db = 'Artista'
-                        else:
-                            rol_db = 'Cliente'
-                            
-                    # 3. VERIFICACIÓN EXPANSIVA: Búsqueda en la colección de artistas
-                    # Convertimos el ID a número por si la migración lo guardó como Int
-                    user_query_val = int(user_id) if str(user_id).isdigit() else str(user_id)
-                    
-                    es_artista = db.artistas.find_one({
-                        "$or": [
-                            {"idUsuario": user_query_val},
-                            {"idUsuario": str(user_id)},
-                            {"Usuario_idUsuario": user_query_val},
-                            {"usuario_id": user_query_val},
-                            {"Usuario_id": user_query_val},
-                            {"idUsuarioSQL": user_query_val}
-                        ]
-                    })
-                    
-                    if es_artista:
-                        rol_db = 'Artista'
-                        
-                    # ==========================================
-                    # 🐞 DEBUG: Imprimir en el CMD para rastrear el error
-                    # ==========================================
-                    print("\n" + "="*50)
-                    print(f"🔍 DEBUG LOGIN - USUARIO: {correo}")
-                    print(f"1. ID detectado (user_id): {user_id}")
-                    print(f"2. Rol numérico en BD (id_rol): {id_rol}")
-                    print(f"3. Rol en texto (rol_db): {rol_db}")
-                    print(f"4. ¿Se encontró en db.artistas?: {'SÍ ✅' if es_artista else 'NO ❌'}")
-                    if not es_artista:
-                        print("   -> El sistema te mandará al panel de usuario porque no halló tu perfil de artista.")
-                    print("="*50 + "\n")
-                    # ==========================================
-                        
-                    request.session['usuario_rol'] = rol_db
-                    
-                    # Redirección final
-                    if rol_db == 'Admin':
-                        return redirect('index')
-                    elif rol_db == 'Artista':
-                        return redirect('dashboard_artista')
-                    else:
-                        return redirect('dashboard_usuario')
-                else:
-                    messages.error(request, "Contraseña incorrecta.")
-            else:
-                messages.error(request, "El correo electrónico no está registrado.")
+                if usuario.get('estado') != 'Activo':
+                    messages.error(request, 'Esta cuenta se encuentra actualmente inactiva.')
+                    return render(request, 'login.html')
+
+                # 3. CREACIÓN DE SESIÓN (Sincronizada con el decorador)
+                request.session['usuario_id'] = str(usuario['_id'])
                 
+                # Normalizamos el nombre del rol para que pase las validaciones de tu decorador
+                rol_bd = usuario.get('rol', 'Cliente')
+                if rol_bd == 'Administrador':
+                    request.session['usuario_rol'] = 'Admin'
+                else:
+                    request.session['usuario_rol'] = rol_bd
+
+                request.session['nombre'] = usuario.get('nombre', '')
+                request.session['apellido'] = usuario.get('apellido', '')
+
+                # 4. REDIRECCIÓN SEGÚN TU urls.py
+                rol = request.session['usuario_rol']
+                
+                if rol == 'Admin':
+                    return redirect('index') # Redirige a la vista index (Admin)
+                elif rol == 'Artista':
+                    return redirect('dashboard_artista') 
+                else:
+                    return redirect('dashboard_usuario') 
+
+            else:
+                messages.error(request, 'Credenciales incorrectas. Inténtelo de nuevo.')
+
         except Exception as e:
-            messages.error(request, f"Error al conectar con la base de datos: {str(e)}")
+            messages.error(request, f'Error de conexión con la base de datos: {str(e)}')
 
     return render(request, 'auth/login.html')
 
@@ -1099,21 +1113,38 @@ def procesar_pago(request):
             
     return render(request, 'dashboards/facturacion.html')
 
+# MANTENIMIENTO DE SUSCRIPCIONES
 @verificar_rol(['Admin'])
 def verificar_suscripciones(request):
-    # Verificación de seguridad: Solo el Admin puede ejecutar esto
+    """
+    Reemplazo del Procedimiento Almacenado de SQL Server.
+    Actualiza el estado de las suscripciones vencidas directamente en Mongo.
+    """
     if 'usuario_id' not in request.session or request.session.get('usuario_rol') != 'Admin':
         messages.error(request, "Acceso denegado. Esta acción es exclusiva para administradores.")
         return redirect('login')
         
     try:
-        with connection.cursor() as cursor:
-            # Consumo del Procedimiento Almacenado que contiene el Cursor
-            cursor.execute("EXEC Facturacion.sp_VerificarSuscripcionesVencidas")
+        fecha_actual = datetime.now()
+        
+        # Actualización masiva: Busca planes Premium que ya pasaron su fecha de fin
+        # y los degrada a Free usando $set
+        resultado = db.usuarios.update_many(
+            {
+                "suscripcion.plan": "Premium",
+                "suscripcion.fechaFin": {"$lt": fecha_actual}
+            },
+            {
+                "$set": {
+                    "suscripcion.plan": "Free",
+                    "suscripcion.estado": "Vencida"
+                }
+            }
+        )
             
-        messages.success(request, "⚙️ Mantenimiento completado: El cursor ha verificado y actualizado las suscripciones vencidas exitosamente.")
+        messages.success(request, f"⚙️ Mantenimiento completado: Se degradaron {resultado.modified_count} suscripciones vencidas a plan Free.")
     except Exception as e:
-        messages.error(request, f"Error al ejecutar el cursor de mantenimiento: {str(e)}")
+        messages.error(request, f"Error al ejecutar el mantenimiento NoSQL: {str(e)}")
         
     return redirect('index')
 

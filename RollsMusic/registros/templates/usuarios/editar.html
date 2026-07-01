@@ -86,13 +86,12 @@
                     </div>
                         <div class="col-md-6">
                             <label for="rol" class="form-label">Rol del Usuario</label>
-                            <select name="rol" id="rol" class="form-select">
-                                {% for rol in roles %}
-                                <option value="{{ rol.idRol }}" {% if rol.idRol == usuario.Rol_idRol_id %}selected{% endif %}>
-                                    {{ rol.nombre }}
-                                </option>
-                                {% endfor %}
+                            <select name="rol" class="form-select" required>
+                                <option value="Cliente" {% if usuario.rol_nombre == 'Cliente' %}selected{% endif %}>Cliente</option>
+                                <option value="Artista" {% if usuario.rol_nombre == 'Artista' %}selected{% endif %}>Artista</option>
+                                <option value="Administrador" {% if usuario.rol_nombre == 'Administrador' %}selected{% endif %}>Administrador</option>
                             </select>
+                         
                         </div>
                 </div>
 

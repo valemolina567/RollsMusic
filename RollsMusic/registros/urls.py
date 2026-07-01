@@ -12,8 +12,8 @@ urlpatterns = [
    # Usuarios (Nombres específicos y claros)
    path('usuarios/', views.listar_usuarios, name='listar_usuarios'),
    path('usuarios/crear/', views.crear_usuario, name='crear_usuario'),
-   path('usuarios/editar/<int:id>/', views.editar_usuario, name='editar_usuario'),
-   path('usuarios/eliminar/<int:id>/', views.eliminar_usuario, name='eliminar_usuario'),
+   path('usuarios/editar/<str:id>/', views.editar_usuario, name='editar_usuario'), 
+   path('usuarios/eliminar/<str:id>/', views.eliminar_usuario, name='eliminar_usuario'), 
 
     # Discográficas
     path('discograficas/', views.listar_discograficas, name='listar_discograficas'),
