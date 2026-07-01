@@ -51,7 +51,7 @@ def verificar_rol(roles_permitidos):
     return decorator
 
 # ==========================================
-# CRUD: USUARIOS (100% MONGODB)
+# CRUD: USUARIOS - MONGODB
 # ==========================================
 
 @verificar_rol(['Admin'])
@@ -190,18 +190,30 @@ def index(request):
     return render(request, 'index.html', context)
 
 # ==========================================
-# CRUD: DISCOGRAFICAS
+# CRUD: DISCOGRAFICAS - MONGODB
 # ==========================================
+
 @verificar_rol(['Admin'])
 def listar_discograficas(request):
     query = request.GET.get('q', '').strip()
     
+    # 1. Filtro de búsqueda NoSQL
+    filtro = {}
     if query:
-        items = Discografica.objects.filter(nombre__icontains=query)
-    else:
-        items = Discografica.objects.all()
+        filtro = {"nombre": {"$regex": query, "$options": "i"}}
         
-    return render(request, 'discograficas/listar.html', {'items': items})
+    # 2. Consultamos directamente a la colección db.discograficas
+    items_mongo = list(db.discograficas.find(filtro))
+    
+    # 3. Preparamos el diccionario para el HTML
+    for item in items_mongo:
+        item['id_mongo'] = str(item['_id'])
+        item['idDiscografica'] = item.get('idDiscograficaSQL') or str(item['_id'])[-6:].upper()
+        item['nombre'] = item.get('nombre', 'Sin nombre')
+        item['pais'] = item.get('pais', 'No especificado')
+        item['fechaFundacion'] = item.get('fechaFundacion', '')
+        
+    return render(request, 'discograficas/listar.html', {'items': items_mongo})
 
 @verificar_rol(['Admin'])
 def crear_discografica(request):
@@ -215,32 +227,92 @@ def crear_discografica(request):
             messages.error(request, "Todos los campos obligatorios deben completarse.")
             return render(request, 'discograficas/crear.html')
 
-        Discografica.objects.create(nombre=nombre, pais=pais, fechaFundacion=fecha, logo=logo)
-        messages.success(request, "Discográfica agregada exitosamente.")
+        # Documento BSON para insertar
+        nueva_discografica = {
+            "nombre": nombre,
+            "pais": pais,
+            "fechaFundacion": fecha,
+            "logo": logo
+        }
+        
+        db.discograficas.insert_one(nueva_discografica)
+        messages.success(request, f"Discográfica '{nombre}' agregada exitosamente a MongoDB.")
         return redirect('listar_discograficas')
+        
     return render(request, 'discograficas/crear.html')
 
 @verificar_rol(['Admin'])
 def editar_discografica(request, id):
-    item = get_object_or_404(Discografica, idDiscografica=id)
+    # Soporta tanto IDs de MongoDB como los viejos de SQL
+    filtro = {"_id": ObjectId(id)} if len(str(id)) == 24 else {"idDiscograficaSQL": int(id)}
+    item = db.discograficas.find_one(filtro)
+    
     if request.method == 'POST':
-        item.nombre = request.POST.get('nombre')
-        item.pais = request.POST.get('pais')
-        item.fechaFundacion = request.POST.get('fechaFundacion')
-        item.logo = request.POST.get('logo') or item.logo
-        item.save()
+        db.discograficas.update_one(filtro, {
+            "$set": {
+                "nombre": request.POST.get('nombre', item.get('nombre')),
+                "pais": request.POST.get('pais', item.get('pais')),
+                "fechaFundacion": request.POST.get('fechaFundacion', item.get('fechaFundacion')),
+                "logo": request.POST.get('logo', '').strip() or item.get('logo')
+            }
+        })
+        messages.success(request, "Discográfica actualizada exitosamente.")
         return redirect('listar_discograficas')
+        
+    # Agregamos id_mongo para la URL de retorno en el HTML
+    if item:
+        item['id_mongo'] = str(item['_id'])
+        
     return render(request, 'discograficas/editar.html', {'item': item})
 
 @verificar_rol(['Admin'])
 def eliminar_discografica(request, id):
-    item = get_object_or_404(Discografica, idDiscografica=id)
-    if request.method == 'POST':
-        try:
-            item.delete()
-        except:
-            messages.error(request, "No se puede eliminar: tiene artistas asociados.")
-        return redirect('listar_discograficas')
+    try:
+        # 1. Intentamos estructurar el filtro por ObjectId de forma segura
+        if len(str(id)) == 24:
+            filtro = {"_id": ObjectId(id)}
+        else:
+            filtro = {"idDiscograficaSQL": int(id)}
+            
+        discografica = db.discograficas.find_one(filtro)
+        
+        if discografica:
+            id_sql = discografica.get('idDiscograficaSQL')
+            id_mongo = discografica['_id']
+            
+            # 2. Buscamos relaciones activas soportando enteros, strings y ObjectIds
+            condiciones_artistas = [
+                {"idDiscografica": id_mongo},
+                {"Discografica_idDiscografica": id_mongo},
+                {"idDiscografica": str(id_mongo)},
+                {"Discografica_idDiscografica": str(id_mongo)}
+            ]
+            
+            # Si el registro vino migrado de SQL, añadimos los identificadores numéricos
+            if id_sql is not None:
+                condiciones_artistas.extend([
+                    {"idDiscografica": int(id_sql)},
+                    {"Discografica_idDiscografica": int(id_sql)},
+                    {"idDiscografica": str(id_sql)},
+                    {"Discografica_idDiscografica": str(id_sql)}
+                ])
+            
+            artistas_asociados = db.artistas.count_documents({"$or": condiciones_artistas})
+            
+            if artistas_asociados > 0:
+                messages.error(request, f"Operación cancelada: La discográfica '{discografica.get('nombre')}' tiene {artistas_asociados} artista(s) vinculados en MongoDB.")
+                return redirect('listar_discograficas')
+                
+            # 3. Si está limpia de dependencias, procedemos al borrado físico
+            db.discograficas.delete_one({"_id": id_mongo})
+            messages.success(request, f"La discográfica '{discografica.get('nombre')}' ha sido eliminada permanentemente.")
+        else:
+            messages.error(request, "Error: No se encontró el registro de la discográfica.")
+            
+    except Exception as e:
+        messages.error(request, f"Error de ejecución en MongoDB: {str(e)}")
+        
+    return redirect('listar_discograficas')
 
 # ==========================================
 # CRUD: ARTISTAS (Con Géneros Dinámicos)

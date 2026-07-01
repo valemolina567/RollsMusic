@@ -45,6 +45,18 @@
             </a>
         </div>
 
+        {% if messages %}
+            <div class="mb-4">
+                {% for message in messages %}
+                    <div class="alert {% if message.tags == 'error' %}alert-danger bg-danger{% elif message.tags == 'success' %}alert-success bg-success{% else %}alert-info bg-info{% endif %} text-white border-0 alert-dismissible fade show d-flex align-items-center" role="alert">
+                        <i class="bi {% if message.tags == 'error' %}bi-exclamation-octagon-fill{% elif message.tags == 'success' %}bi-check-circle-fill{% else %}bi-info-circle-fill{% endif %} me-2 fs-5"></i>
+                        <div>{{ message }}</div>
+                        <button type="button" class="btn-close btn-close-white ms-auto" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+
         <div class="admin-card p-3 mb-4">
             <form method="GET" action="{% url 'listar_discograficas' %}" class="row g-2 align-items-center">
                 <div class="col-10 col-md-11">
@@ -80,13 +92,15 @@
                             <td>{{ item.fechaFundacion }}</td>
                             <td class="text-center pe-4">
                                 <div class="d-inline-flex gap-2">
-                                    <a href="{% url 'editar_discografica' item.idDiscografica %}" class="btn btn-outline-info btn-sm">
+                                    <a href="{% url 'editar_discografica' item.id_mongo %}" class="btn btn-outline-info btn-sm">
                                         <i class="bi bi-pencil-square"></i> Editar
                                     </a>
-                                    <form action="{% url 'eliminar_discografica' item.idDiscografica %}" method="POST" onsubmit="return confirm('¿Seguro que deseas eliminar esta discográfica?');">
+                                    <form action="{% url 'eliminar_discografica' item.id_mongo %}" method="POST" onsubmit="return confirm('¿Seguro que deseas eliminar permanentemente esta discográfica?');">
                                         {% csrf_token %}
-                                        <button type="submit" class="btn btn-outline-danger btn-sm">
-                                            <i class="bi bi-trash3-fill"></i> Eliminar
+                                        <button type="submit" 
+                                                class="btn btn-danger btn-sm" 
+                                                data-nombre="{{ item.nombre }}">
+                                            <i class="bi bi-trash-fill"></i> Eliminar
                                         </button>
                                     </form>
                                 </div>

@@ -10,16 +10,16 @@ urlpatterns = [
     path('mantenimiento/verificar-suscripciones/', views.verificar_suscripciones, name='verificar_suscripciones'),
 
    # Usuarios (Nombres específicos y claros)
-   path('usuarios/', views.listar_usuarios, name='listar_usuarios'),
-   path('usuarios/crear/', views.crear_usuario, name='crear_usuario'),
-   path('usuarios/editar/<str:id>/', views.editar_usuario, name='editar_usuario'), 
-   path('usuarios/eliminar/<str:id>/', views.eliminar_usuario, name='eliminar_usuario'), 
+    path('usuarios/', views.listar_usuarios, name='listar_usuarios'),
+    path('usuarios/crear/', views.crear_usuario, name='crear_usuario'),
+    path('usuarios/editar/<str:id>/', views.editar_usuario, name='editar_usuario'), 
+    path('usuarios/eliminar/<str:id>/', views.eliminar_usuario, name='eliminar_usuario'), 
 
     # Discográficas
     path('discograficas/', views.listar_discograficas, name='listar_discograficas'),
     path('discograficas/crear/', views.crear_discografica, name='crear_discografica'),
-    path('discograficas/editar/<int:id>/', views.editar_discografica, name='editar_discografica'),
-    path('discograficas/eliminar/<int:id>/', views.eliminar_discografica, name='eliminar_discografica'),
+    path('discograficas/editar/<str:id>/', views.editar_discografica, name='editar_discografica'), 
+    path('discograficas/eliminar/<str:id>/', views.eliminar_discografica, name='eliminar_discografica'),
 
     # Artistas
     path('artistas/', views.listar_artistas, name='listar_artistas'),
