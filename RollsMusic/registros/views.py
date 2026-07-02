@@ -1,80 +1,192 @@
-from django.shortcuts import render, redirect, get_object_or_404
+from django.shortcuts import render, redirect
 from django.contrib import messages
 from datetime import date
-from django.db.models import Q
-
-# Se añade 'Rol' a las importaciones
-from .models import Usuario, Discografica, Artista, Album, Cancion, Genero, PlanEntity, Rol
-from django.db import connection
-from django.db import DatabaseError
 from functools import wraps
 from django.http import JsonResponse
 
-from bson.objectid import ObjectId # Para manejar los IDs alfanuméricos de Mongo
-from datetime import datetime # Fundamental para las fechas automáticas
-from .db import db # Tu conexión de PyMongo
+# Importaciones exclusivas de MongoDB y utilidades
+from bson.objectid import ObjectId
+from datetime import datetime
+from .db import db
 
 import os
 from django.core.files.storage import FileSystemStorage
 from django.conf import settings
 
+
+# ==========================================
+# DECORADOR DE SEGURIDAD
+# ==========================================
 def verificar_rol(roles_permitidos):
-    """Decorador para restringir el acceso a vistas según el rol de la sesión."""
     def decorator(view_func):
         @wraps(view_func)
         def _wrapped_view(request, *args, **kwargs):
-            # 1. Validar si el usuario está autenticado en la sesión
-            if 'usuario_id' not in request.session:
+            rol_usuario = request.session.get('usuario_rol')
+            
+            if not request.session.get('usuario_id') or not rol_usuario:
                 messages.error(request, "Debes iniciar sesión para acceder a esta sección.")
                 return redirect('login')
             
-            # 2. Validar si su rol coincide con los permitidos
-            rol_usuario = request.session.get('usuario_rol')
-            if rol_usuario not in roles_permitidos:
-                messages.error(request, f"Acceso denegado. Tu rol de '{rol_usuario}' no tiene permisos para esta acción.")
-                
-                # Redirección inteligente según su rol actual
-                if rol_usuario == 'Artista':
+            rol_usuario_limpio = str(rol_usuario).strip().capitalize()
+            roles_permitidos_limpios = [str(r).strip().capitalize() for r in roles_permitidos]
+            
+            if rol_usuario_limpio in roles_permitidos_limpios:
+                return view_func(request, *args, **kwargs)
+            else:
+                messages.error(request, f"No tienes permisos para acceder a esta sección con tu rol de {rol_usuario}.")
+                if rol_usuario_limpio == 'Artista':
                     return redirect('dashboard_artista')
-                elif rol_usuario == 'Cliente':
-                    return redirect('dashboard_usuario')
+                elif rol_usuario_limpio == 'Admin':
+                    return redirect('index')
                 else:
-                    return redirect('login')
-                    
-            return view_func(request, *args, **kwargs)
+                    return redirect('dashboard_usuario')
         return _wrapped_view
-    return decorator    
+    return decorator
 
+
+# ==========================================
+# CRUD: USUARIOS - MONGODB
+# ==========================================
 @verificar_rol(['Admin'])
 def listar_usuarios(request):
     query = request.GET.get('q', '').strip()
-    
+    filtro = {}
     if query:
-        # Busca coincidencias tanto en el nombre como en el apellido
-        usuarios = Usuario.objects.filter(Q(nombre__icontains=query) | Q(apellido__icontains=query))
-    else:
-        usuarios = Usuario.objects.all()
+        filtro = {
+            "$or": [
+                {"nombre": {"$regex": query, "$options": "i"}},
+                {"apellido": {"$regex": query, "$options": "i"}}
+            ]
+        }
         
-    return render(request, 'usuarios/listar.html', {'usuarios': usuarios})
+    usuarios_mongo = list(db.usuarios.find(filtro))
+    
+    for u in usuarios_mongo:
+        u['id_mongo'] = str(u['_id'])
+        u['idUsuario'] = u.get('idUsuarioSQL') or str(u['_id'])[-6:].upper()
+        u['nombre'] = u.get('nombre', 'Sin nombre')
+        u['apellido'] = u.get('apellido', '')
+        u['correo'] = u.get('correo', 'Sin correo')
+        u['estado'] = u.get('estado', 'Inactivo')
+        u['rol_nombre'] = u.get('rol', 'Cliente')
+        
+    return render(request, 'usuarios/listar.html', {'usuarios': usuarios_mongo})
 
-# PANEL DE INICIO GENERAL
 @verificar_rol(['Admin'])
-def index(request):
-    return render(request, 'index.html')
+def crear_usuario(request):
+    if request.method == 'POST':
+        nombre = request.POST.get('nombre', '').strip()
+        apellido = request.POST.get('apellido', '').strip()
+        correo = request.POST.get('correo', '').strip()
+        fecha_nacimiento = request.POST.get('fechaNacimiento', '').strip()
+        contrasenia = request.POST.get('contrasenia', '').strip()
+        rol = request.POST.get('rol', 'Cliente') 
+
+        if db.usuarios.find_one({"correo": correo}):
+            messages.error(request, "Error: Este correo ya se encuentra registrado.")
+            return redirect('crear_usuario')
+
+        nuevo_usuario = {
+            "nombre": nombre,
+            "apellido": apellido,
+            "correo": correo,
+            "contrasenia": contrasenia,
+            "fechaNacimiento": fecha_nacimiento,
+            "fechaRegistro": datetime.now(),
+            "estado": "Activo",
+            "imagen": "default.png",
+            "rol": rol,
+            "suscripcion": {"plan": "Free", "estado": "Activa"}
+        }
+        
+        db.usuarios.insert_one(nuevo_usuario)
+        messages.success(request, f"Usuario {nombre} {apellido} creado correctamente en MongoDB.")
+        return redirect('listar_usuarios')
+    
+    roles = [{'nombre': 'Administrador'}, {'nombre': 'Artista'}, {'nombre': 'Cliente'}]
+    return render(request, 'usuarios/crear.html', {'roles': roles})
+
+@verificar_rol(['Admin'])
+def editar_usuario(request, id):
+    filtro = {"_id": ObjectId(id)} if len(str(id)) == 24 else {"idUsuarioSQL": int(id)}
+    usuario = db.usuarios.find_one(filtro)
+    
+    if request.method == 'POST':
+        db.usuarios.update_one(filtro, {
+            "$set": {
+                "nombre": request.POST.get('nombre', '').strip(),
+                "apellido": request.POST.get('apellido', '').strip(),
+                "correo": request.POST.get('correo', '').strip(),
+                "estado": request.POST.get('estado', '').strip(),
+                "rol": request.POST.get('rol', usuario.get('rol')),
+                "fechaNacimiento": request.POST.get('fechaNacimiento', usuario.get('fechaNacimiento'))
+            }
+        })
+        messages.success(request, "El perfil ha sido actualizado exitosamente en MongoDB.")
+        return redirect('listar_usuarios')
+        
+    roles = [{'nombre': 'Administrador'}, {'nombre': 'Artista'}, {'nombre': 'Cliente'}]
+    usuario['idUsuario'] = str(usuario['_id'])
+    usuario['rol_nombre'] = usuario.get('rol')
+    
+    return render(request, 'usuarios/editar.html', {'usuario': usuario, 'roles': roles})
+
+@verificar_rol(['Admin'])
+def eliminar_usuario(request, id):
+    try:
+        filtro = {"_id": ObjectId(id)} if len(str(id)) == 24 else {"idUsuarioSQL": int(id)}
+        db.usuarios.delete_one(filtro)
+        messages.success(request, "Usuario eliminado correctamente de la plataforma NoSQL.")
+    except Exception as e:
+        messages.error(request, f"Error en MongoDB: {str(e)}")
+    
+    return redirect('listar_usuarios')
+
 
 # ==========================================
-# CRUD: DISCOGRAFICAS
+# DASHBOARD ADMIN
+# ==========================================
+@verificar_rol(['Admin'])
+def index(request):
+    try:
+        total_usuarios = db.usuarios.count_documents({})
+        total_artistas = db.artistas.count_documents({})
+        total_albumes = db.albumes.count_documents({})
+        total_canciones = db.canciones.count_documents({})
+
+        context = {
+            'total_usuarios': total_usuarios,
+            'total_artistas': total_artistas,
+            'total_albumes': total_albumes,
+            'total_canciones': total_canciones,
+        }
+    except Exception as e:
+        context = {
+            'total_usuarios': 0, 'total_artistas': 0,
+            'total_albumes': 0, 'total_canciones': 0,
+        }
+        
+    return render(request, 'index.html', context)
+
+
+# ==========================================
+# CRUD: DISCOGRAFICAS - MONGODB
 # ==========================================
 @verificar_rol(['Admin'])
 def listar_discograficas(request):
     query = request.GET.get('q', '').strip()
-    
-    if query:
-        items = Discografica.objects.filter(nombre__icontains=query)
-    else:
-        items = Discografica.objects.all()
+    filtro = {"nombre": {"$regex": query, "$options": "i"}} if query else {}
         
-    return render(request, 'discograficas/listar.html', {'items': items})
+    items_mongo = list(db.discograficas.find(filtro))
+    
+    for item in items_mongo:
+        item['id_mongo'] = str(item['_id'])
+        item['idDiscografica'] = item.get('idDiscograficaSQL') or str(item['_id'])[-6:].upper()
+        item['nombre'] = item.get('nombre', 'Sin nombre')
+        item['pais'] = item.get('pais', 'No especificado')
+        item['fechaFundacion'] = item.get('fechaFundacion', '')
+        
+    return render(request, 'discograficas/listar.html', {'items': items_mongo})
 
 @verificar_rol(['Admin'])
 def crear_discografica(request):
@@ -88,190 +200,196 @@ def crear_discografica(request):
             messages.error(request, "Todos los campos obligatorios deben completarse.")
             return render(request, 'discograficas/crear.html')
 
-        Discografica.objects.create(nombre=nombre, pais=pais, fechaFundacion=fecha, logo=logo)
-        messages.success(request, "Discográfica agregada exitosamente.")
+        nueva_discografica = {
+            "nombre": nombre,
+            "pais": pais,
+            "fechaFundacion": fecha,
+            "logo": logo
+        }
+        
+        db.discograficas.insert_one(nueva_discografica)
+        messages.success(request, f"Discográfica '{nombre}' agregada exitosamente a MongoDB.")
         return redirect('listar_discograficas')
+        
     return render(request, 'discograficas/crear.html')
 
 @verificar_rol(['Admin'])
 def editar_discografica(request, id):
-    item = get_object_or_404(Discografica, idDiscografica=id)
+    filtro = {"_id": ObjectId(id)} if len(str(id)) == 24 else {"idDiscograficaSQL": int(id)}
+    item = db.discograficas.find_one(filtro)
+    
     if request.method == 'POST':
-        item.nombre = request.POST.get('nombre')
-        item.pais = request.POST.get('pais')
-        item.fechaFundacion = request.POST.get('fechaFundacion')
-        item.logo = request.POST.get('logo') or item.logo
-        item.save()
+        db.discograficas.update_one(filtro, {
+            "$set": {
+                "nombre": request.POST.get('nombre', item.get('nombre')),
+                "pais": request.POST.get('pais', item.get('pais')),
+                "fechaFundacion": request.POST.get('fechaFundacion', item.get('fechaFundacion')),
+                "logo": request.POST.get('logo', '').strip() or item.get('logo')
+            }
+        })
+        messages.success(request, "Discográfica actualizada exitosamente.")
         return redirect('listar_discograficas')
+        
+    if item:
+        item['id_mongo'] = str(item['_id'])
+        
     return render(request, 'discograficas/editar.html', {'item': item})
 
 @verificar_rol(['Admin'])
 def eliminar_discografica(request, id):
-    item = get_object_or_404(Discografica, idDiscografica=id)
-    if request.method == 'POST':
-        try:
-            item.delete()
-        except:
-            messages.error(request, "No se puede eliminar: tiene artistas asociados.")
-        return redirect('listar_discograficas')
+    try:
+        filtro = {"_id": ObjectId(id)} if len(str(id)) == 24 else {"idDiscograficaSQL": int(id)}
+        discografica = db.discograficas.find_one(filtro)
+        
+        if discografica:
+            id_sql = discografica.get('idDiscograficaSQL')
+            id_mongo = discografica['_id']
+            
+            condiciones_artistas = [
+                {"idDiscografica": id_mongo},
+                {"Discografica_idDiscografica": id_mongo},
+                {"idDiscografica": str(id_mongo)},
+                {"Discografica_idDiscografica": str(id_mongo)}
+            ]
+            
+            if id_sql is not None:
+                condiciones_artistas.extend([
+                    {"idDiscografica": int(id_sql)},
+                    {"Discografica_idDiscografica": int(id_sql)},
+                    {"idDiscografica": str(id_sql)},
+                    {"Discografica_idDiscografica": str(id_sql)}
+                ])
+            
+            artistas_asociados = db.artistas.count_documents({"$or": condiciones_artistas})
+            
+            if artistas_asociados > 0:
+                messages.error(request, f"Operación cancelada: La discográfica tiene {artistas_asociados} artista(s) vinculados.")
+                return redirect('listar_discograficas')
+                
+            db.discograficas.delete_one({"_id": id_mongo})
+            messages.success(request, f"La discográfica ha sido eliminada permanentemente.")
+        else:
+            messages.error(request, "Error: No se encontró el registro.")
+            
+    except Exception as e:
+        messages.error(request, f"Error en MongoDB: {str(e)}")
+        
+    return redirect('listar_discograficas')
+
 
 # ==========================================
-# CRUD: ARTISTAS (Con Géneros Dinámicos)
+# CRUD: ARTISTAS (100% MONGODB)
 # ==========================================
-
 @verificar_rol(['Admin'])
 def listar_artistas(request):
     query = request.GET.get('q', '').strip()
+    filtro = {"nombreArtistico": {"$regex": query, "$options": "i"}} if query else {}
+        
+    items_mongo = list(db.artistas.find(filtro))
     
-    if query:
-        items = list(Artista.objects.filter(nombreArtistico__icontains=query))
-    else:
-        items = list(Artista.objects.all())
+    dict_discos = {}
+    for d in db.discograficas.find():
+        if d.get('idDiscograficaSQL') is not None: 
+            dict_discos[str(d['idDiscograficaSQL'])] = d
+        dict_discos[str(d['_id'])] = d
         
-    # Mapeo de columnas dinámicas crudas para inyectarlas de forma segura en la vista
-    with connection.cursor() as cursor:
-        cursor.execute("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'Catalogo' AND TABLE_NAME = 'Artista'")
-        art_cols = [row[0] for row in cursor.fetchall()]
+    dict_generos = {}
+    for g in db.generos.find():
+        if g.get('idGeneroSQL') is not None: 
+            dict_generos[str(g['idGeneroSQL'])] = g
+        dict_generos[str(g['_id'])] = g
+    
+    for item in items_mongo:
+        item['id_mongo'] = str(item['_id'])
+        item['idArtista'] = item.get('idArtistaSQL') or str(item['_id'])[-6:].upper()
+        item['nombreArtistico'] = item.get('nombreArtistico') or item.get('nombre') or 'Desconocido'
         
-        col_art_genero = 'genero' if 'genero' in art_cols else ('generoPrincipal' if 'generoPrincipal' in art_cols else None)
-        col_art_verificado = 'verificado' if 'verificado' in art_cols else None
+        img_raw = item.get('imagen', 'default_artist.png')
+        if img_raw and not img_raw.startswith('artistas/') and img_raw != 'default_artist.png':
+            item['imagen_limpia'] = f"artistas/{img_raw}"
+        else:
+            item['imagen_limpia'] = img_raw
 
-        for item in items:
-            item.genero_db = ""
-            item.verificado_db = False
-            
-            query_extra = "SELECT idArtista"
-            params_extra = []
-            if col_art_genero: query_extra += f", {col_art_genero}"
-            if col_art_verificado: query_extra += f", {col_art_verificado}"
-            query_extra += " FROM Catalogo.Artista WHERE idArtista = %s"
-            
-            cursor.execute(query_extra, [item.idArtista])
-            row = cursor.fetchone()
-            if row:
-                idx = 1
-                if col_art_genero:
-                    item.genero_db = row[idx] if row[idx] else ""
-                    idx += 1
-                if col_art_verificado:
-                    item.verificado_db = bool(row[idx])
+        disco_id = str(item.get('idDiscografica') or item.get('Discografica_idDiscografica') or '')
+        disco_doc = dict_discos.get(disco_id)
+        item['discografica_nombre'] = disco_doc.get('nombre', 'Independiente') if disco_doc else "Independiente"
 
-    return render(request, 'artistas/listar.html', {'items': items})
+        genero_id = str(item.get('genero') or item.get('generoPrincipal') or item.get('idGenero') or '')
+        genero_name = "N/A"
+        
+        genero_raw = item.get('genero') or item.get('generoPrincipal') or item.get('idGenero')
+        if isinstance(genero_raw, str) and len(genero_raw) < 20 and not genero_raw.isdigit() and len(genero_id) != 24:
+            genero_name = genero_raw
+        elif genero_id in dict_generos:
+            genero_name = dict_generos[genero_id].get('nombre', 'N/A')
+                        
+        item['genero_db'] = genero_name
+        item['verificado_db'] = bool(item.get('verificado', False))
+        
+    return render(request, 'artistas/listar.html', {'items': items_mongo})
 
-
-@verificar_rol(['Admin'])
 @verificar_rol(['Admin'])
 def crear_artista(request):
-    discograficas = Discografica.objects.all()
-    generos = Genero.objects.all()
-    
     if request.method == 'POST':
-        nombre_artistico = request.POST.get('nombreArtistico')
+        nombre_artistico = request.POST.get('nombreArtistico', '').strip()
         biografia = request.POST.get('biografia', '')
         pais = request.POST.get('pais', 'Desconocido')
-        fecha_creacion = request.POST.get('fechaCreacion') or date.today()
+        fecha_creacion = request.POST.get('fechaCreacion') or date.today().strftime('%Y-%m-%d')
         disco_id = request.POST.get('discografica')
         id_usuario = request.POST.get('usuario')
         genero_form = request.POST.get('generoPrincipal')
-        verificado_form = 1 if request.POST.get('verificado') else 0 
+        verificado_form = True if request.POST.get('verificado') else False 
         
-        # --- LÓGICA PARA LA IMAGEN ---
         nombre_imagen = 'default_artist.png'
         if request.FILES.get('imagen'):
             imagen_archivo = request.FILES['imagen']
             fs = FileSystemStorage(location=os.path.join('static', 'images', 'artistas'))
-            # Guarda el archivo y previene duplicados renombrándolo si es necesario
             filename = fs.save(imagen_archivo.name, imagen_archivo)
-            nombre_imagen = f"artistas/{filename}" # Se guardará como 'artistas/nombre.jpg'
+            nombre_imagen = f"artistas/{filename}"
 
-        with connection.cursor() as cursor:
-            try:
-                cursor.execute("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'Catalogo' AND TABLE_NAME = 'Artista'")
-                art_cols = [row[0] for row in cursor.fetchall()]
-                
-                col_art_usuario = 'Usuario_idUsuario' if 'Usuario_idUsuario' in art_cols else ('idUsuario' if 'idUsuario' in art_cols else ('Usuario_id' if 'Usuario_id' in art_cols else None))
-                col_art_nombre = 'nombreArtistico' if 'nombreArtistico' in art_cols else ('nombre_artistico' if 'nombre_artistico' in art_cols else 'nombre')
-                col_art_genero = 'genero' if 'genero' in art_cols else ('generoPrincipal' if 'generoPrincipal' in art_cols else None)
-                col_art_verificado = 'verificado' if 'verificado' in art_cols else None
-                
-                cols = [col_art_nombre, 'pais', 'fechaCreacion', 'imagen', 'biografia', 'Discografica_idDiscografica']
-                vals = [nombre_artistico, pais, fecha_creacion, nombre_imagen, biografia, disco_id]
-                placeholders = ["%s"] * len(cols)
-                
-                if col_art_usuario and id_usuario:
-                    cols.append(col_art_usuario)
-                    vals.append(int(id_usuario))
-                    placeholders.append("%s")
-                
-                if col_art_genero and genero_form:
-                    cols.append(col_art_genero)
-                    vals.append(genero_form)
-                    placeholders.append("%s")
-                    
-                if col_art_verificado:
-                    cols.append(col_art_verificado)
-                    vals.append(verificado_form)
-                    placeholders.append("%s")
-                    
-                sql_insert = f"INSERT INTO Catalogo.Artista ({', '.join(cols)}) VALUES ({', '.join(placeholders)})"
-                cursor.execute(sql_insert, vals)
-                
-                messages.success(request, f"Perfil de '{nombre_artistico}' creado con imagen correctamente.")
-                return redirect('listar_artistas')
-            except Exception as e:
-                messages.error(request, f"Error en SQL Server: {str(e)}")
-                
-    usuarios_artistas = Usuario.objects.filter(Rol_idRol__nombre='Artista')
-    if not usuarios_artistas.exists():
-        usuarios_artistas = Usuario.objects.all()
+        nuevo_artista = {
+            "nombreArtistico": nombre_artistico,
+            "biografia": biografia,
+            "pais": pais,
+            "fechaCreacion": fecha_creacion,
+            "imagen": nombre_imagen,
+            "idDiscografica": disco_id,
+            "idUsuario": id_usuario,
+            "genero": genero_form,
+            "verificado": verificado_form
+        }
         
+        try:
+            db.artistas.insert_one(nuevo_artista)
+            messages.success(request, f"Perfil creado correctamente.")
+            return redirect('listar_artistas')
+        except Exception as e:
+            messages.error(request, f"Error en MongoDB: {str(e)}")
+
+    discograficas = list(db.discograficas.find({}, {"_id": 1, "nombre": 1, "idDiscograficaSQL": 1}))
+    for d in discograficas: d['idDiscografica'] = d.get('idDiscograficaSQL') or str(d['_id'])
+        
+    usuarios_artistas = list(db.usuarios.find({"$or": [{"rol": "Artista"}, {"rol": "Administrador"}]}))
+    for u in usuarios_artistas: u['idUsuario'] = u.get('idUsuarioSQL') or str(u['_id'])
+        
+    generos = list(db.generos.find({}, {"_id": 1, "nombre": 1, "idGeneroSQL": 1}))
+    for g in generos: g['idGenero'] = g.get('idGeneroSQL') or str(g['_id'])
+    if not generos: generos = [{'idGenero': 'Pop', 'nombre': 'Pop'}, {'idGenero': 'Rock', 'nombre': 'Rock'}, {'idGenero': 'Urbano', 'nombre': 'Urbano'}]
+
     return render(request, 'artistas/crear.html', {
         'discograficas': discograficas,
         'usuarios_artistas': usuarios_artistas,
         'generos': generos
     })
 
-
 @verificar_rol(['Admin'])
 def editar_artista(request, id):
-    artista_obj = get_object_or_404(Artista, idArtista=id)
-    discograficas = Discografica.objects.all()
-    generos = Genero.objects.all()
+    filtro = {"_id": ObjectId(id)} if len(str(id)) == 24 else {"idArtistaSQL": int(id)}
+    artista_obj = db.artistas.find_one(filtro)
     
-    usuarios_artistas = Usuario.objects.filter(Rol_idRol__nombre='Artista')
-    if not usuarios_artistas.exists():
-        usuarios_artistas = Usuario.objects.all()
-
-    artista_usuario_id = None
-    genero_actual = ""
-    es_verificado = False
-    
-    with connection.cursor() as cursor:
-        cursor.execute("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'Catalogo' AND TABLE_NAME = 'Artista'")
-        art_cols = [row[0] for row in cursor.fetchall()]
-        
-        col_art_usuario = 'Usuario_idUsuario' if 'Usuario_idUsuario' in art_cols else ('idUsuario' if 'idUsuario' in art_cols else ('Usuario_id' if 'Usuario_id' in art_cols else None))
-        col_art_genero = 'genero' if 'genero' in art_cols else ('generoPrincipal' if 'generoPrincipal' in art_cols else None)
-        col_art_verificado = 'verificado' if 'verificado' in art_cols else None
-        
-        query_extra = "SELECT idArtista"
-        if col_art_usuario: query_extra += f", {col_art_usuario}"
-        if col_art_genero: query_extra += f", {col_art_genero}"
-        if col_art_verificado: query_extra += f", {col_art_verificado}"
-        query_extra += " FROM Catalogo.Artista WHERE idArtista = %s"
-        
-        cursor.execute(query_extra, [id])
-        row = cursor.fetchone()
-        if row:
-            idx = 1
-            if col_art_usuario:
-                artista_usuario_id = row[idx]
-                idx += 1
-            if col_art_genero:
-                genero_actual = row[idx] if row[idx] else ""
-                idx += 1
-            if col_art_verificado:
-                es_verificado = bool(row[idx])
+    if not artista_obj:
+        messages.error(request, "Artista no encontrado.")
+        return redirect('listar_artistas')
 
     if request.method == 'POST':
         nombre_form = request.POST.get('nombreArtistico')
@@ -279,42 +397,47 @@ def editar_artista(request, id):
         disco_id = request.POST.get('discografica')
         id_usuario = request.POST.get('usuario')
         genero_form = request.POST.get('generoPrincipal')
-        verificado_form = 1 if request.POST.get('verificado') else 0
+        verificado_form = True if request.POST.get('verificado') else False
 
-        # --- ACTUALIZACIÓN DE IMAGEN ---
-        nombre_imagen = artista_obj.imagen # Por defecto mantiene la actual
+        nombre_imagen = artista_obj.get('imagen', 'default_artist.png')
         if request.FILES.get('imagen'):
             imagen_archivo = request.FILES['imagen']
             fs = FileSystemStorage(location=os.path.join('static', 'images', 'artistas'))
             filename = fs.save(imagen_archivo.name, imagen_archivo)
             nombre_imagen = f"artistas/{filename}"
 
-        with connection.cursor() as cursor:
-            try:
-                col_art_nombre = 'nombre' if 'nombre' in art_cols else 'nombreArtistico'
-                
-                sql_update = f"UPDATE Catalogo.Artista SET {col_art_nombre} = %s, biografia = %s, Discografica_idDiscografica = %s, imagen = %s"
-                params = [nombre_form, biografia_form, disco_id, nombre_imagen]
-                
-                if col_art_usuario:
-                    sql_update += f", {col_art_usuario} = %s"
-                    params.append(int(id_usuario) if id_usuario else None)
-                if col_art_genero:
-                    sql_update += f", {col_art_genero} = %s"
-                    params.append(genero_form)
-                if col_art_verificado:
-                    sql_update += f", {col_art_verificado} = %s"
-                    params.append(verificado_form)
-                    
-                sql_update += " WHERE idArtista = %s"
-                params.append(id)
-                
-                cursor.execute(sql_update, params)
-                messages.success(request, f"Perfil de '{nombre_form}' actualizado correctamente.")
-                return redirect('listar_artistas')
-            except Exception as e:
-                messages.error(request, f"Error al guardar en SQL Server: {str(e)}")
+        try:
+            db.artistas.update_one(filtro, {
+                "$set": {
+                    "nombreArtistico": nombre_form,
+                    "biografia": biografia_form,
+                    "idDiscografica": disco_id,
+                    "imagen": nombre_imagen,
+                    "idUsuario": id_usuario,
+                    "genero": genero_form,
+                    "verificado": verificado_form
+                }
+            })
+            messages.success(request, f"Perfil actualizado correctamente.")
+            return redirect('listar_artistas')
+        except Exception as e:
+            messages.error(request, f"Error al guardar en MongoDB: {str(e)}")
+
+    artista_obj['id_mongo'] = str(artista_obj['_id'])
+    artista_usuario_id = str(artista_obj.get('idUsuario', ''))
+    genero_actual = artista_obj.get('genero', '')
+    es_verificado = artista_obj.get('verificado', False)
     
+    discograficas = list(db.discograficas.find({}, {"_id": 1, "nombre": 1, "idDiscograficaSQL": 1}))
+    for d in discograficas: d['idDiscografica'] = str(d.get('idDiscograficaSQL') or d['_id'])
+        
+    usuarios_artistas = list(db.usuarios.find({"$or": [{"rol": "Artista"}, {"rol": "Administrador"}]}))
+    for u in usuarios_artistas: u['idUsuario'] = str(u.get('idUsuarioSQL') or u['_id'])
+        
+    generos = list(db.generos.find({}, {"_id": 1, "nombre": 1, "idGeneroSQL": 1}))
+    for g in generos: g['idGenero'] = str(g.get('idGeneroSQL') or g['_id'])
+    if not generos: generos = [{'idGenero': 'Pop', 'nombre': 'Pop'}, {'idGenero': 'Rock', 'nombre': 'Rock'}, {'idGenero': 'Urbano', 'nombre': 'Urbano'}]
+
     return render(request, 'artistas/editar.html', {
         'artista': artista_obj,
         'artista_usuario_id': artista_usuario_id,
@@ -327,103 +450,259 @@ def editar_artista(request, id):
 
 @verificar_rol(['Admin'])
 def eliminar_artista(request, id):
-    item = get_object_or_404(Artista, idArtista=id)
-    if request.method == 'POST':
-        item.delete()
-        messages.success(request, "Artista eliminado con éxito.")
-        return redirect('listar_artistas')
+    try:
+        filtro = {"_id": ObjectId(id)} if len(str(id)) == 24 else {"idArtistaSQL": int(id)}
+        artista = db.artistas.find_one(filtro)
+        
+        if artista:
+            id_referencia = artista.get('idArtistaSQL') or str(artista['_id'])
+            
+            albumes_vinculados = db.albumes.count_documents({
+                "$or": [
+                    {"idArtista": id_referencia},
+                    {"Artista_idArtista": id_referencia},
+                    {"idArtista": str(id_referencia)}
+                ]
+            })
+            
+            if albumes_vinculados > 0:
+                messages.error(request, f"No se puede eliminar. El artista tiene {albumes_vinculados} álbum(es) registrado(s).")
+                return redirect('listar_artistas')
+
+            imagen_a_borrar = artista.get('imagen')
+            db.artistas.delete_one(filtro)
+            
+            if imagen_a_borrar and imagen_a_borrar != 'default_artist.png':
+                ruta_completa = os.path.join(settings.BASE_DIR, 'registros', 'static', 'images', imagen_a_borrar)
+                if os.path.exists(ruta_completa):
+                    try:
+                        os.remove(ruta_completa)
+                    except Exception:
+                        pass
+
+            messages.success(request, "Artista y su imagen asociada eliminados.")
+        else:
+            messages.error(request, "El artista no existe.")
+            
+    except Exception as e:
+        messages.error(request, f"Fallo al eliminar: {str(e)}")
+        
+    return redirect('listar_artistas')
+
 
 # ==========================================
-# CRUD: ALBUMES
+# CRUD: ALBUMES (100% MONGODB)
 # ==========================================
 @verificar_rol(['Admin'])
 def listar_albumes(request):
     query = request.GET.get('q', '').strip()
-    
-    if query:
-        items = Album.objects.filter(titulo__icontains=query)
-    else:
-        items = Album.objects.all()
+    filtro = {"titulo": {"$regex": query, "$options": "i"}} if query else {}
         
-    return render(request, 'albumes/listar.html', {'items': items})
+    items_mongo = list(db.albumes.find(filtro))
+    
+    dict_artistas = {}
+    for a in db.artistas.find():
+        if a.get('idArtistaSQL') is not None: 
+            dict_artistas[str(a['idArtistaSQL'])] = a
+        dict_artistas[str(a['_id'])] = a
+    
+    for item in items_mongo:
+        item['id_mongo'] = str(item['_id'])
+        item['idAlbum'] = item.get('idAlbumSQL') or str(item['_id'])[-6:].upper()
+        
+        img_name = item.get('imagen')
+        if img_name and img_name != 'default_album.png' and img_name != 'default_album.jpg':
+            item['imagen_url'] = f"{settings.MEDIA_URL}albumes/{img_name}"
+        else:
+            item['imagen_url'] = None 
+            
+        id_art = str(item.get('idArtista') or item.get('Artista_idArtista') or '')
+        artista_doc = dict_artistas.get(id_art)
+        item['artista_nombre'] = artista_doc.get('nombreArtistico', 'Desconocido') if artista_doc else "Desconocido"
+
+    return render(request, 'albumes/listar.html', {'items': items_mongo})
 
 @verificar_rol(['Admin'])
 def crear_album(request):
-    artistas = Artista.objects.all()
     if request.method == 'POST':
         titulo = request.POST.get('titulo')
         fecha = request.POST.get('fechaLanzamiento')
         artista_id = request.POST.get('artista')
         
-        # CAPTURAR LA IMAGEN SUBIDA
         imagen = request.FILES.get('imagen') 
-        
-        artista = get_object_or_404(Artista, idArtista=artista_id)
-        
-        # SI NO SE SUBE IMAGEN, DJANGO ASIGNA AUTOMÁTICAMENTE EL DEFAULT SI ESTÁ CONFIGURADO EN EL MODELO.
-        # SI NO TIENES DEFAULT EN EL MODELO, PASAMOS LA VARIABLE DIRECTAMENTE.
-        Album.objects.create(
-            titulo=titulo, 
-            fechaLanzamiento=fecha, 
-            Artista_idArtista=artista, 
-            imagen=imagen if imagen else 'default_album.png' # Fallback manual
-        )
+        imagen_nombre = 'default_album.png'
+        if imagen:
+            fs = FileSystemStorage(location=os.path.join(settings.MEDIA_ROOT, 'albumes'))
+            filename = fs.save(imagen.name, imagen)
+            imagen_nombre = filename
+
+        nuevo_album = {
+            "titulo": titulo,
+            "fechaLanzamiento": fecha,
+            "idArtista": artista_id,
+            "imagen": imagen_nombre
+        }
+        db.albumes.insert_one(nuevo_album)
+        messages.success(request, f"Álbum '{titulo}' creado exitosamente.")
         return redirect('listar_albumes')
+
+    artistas = list(db.artistas.find({}, {"_id": 1, "nombreArtistico": 1, "idArtistaSQL": 1}))
+    for a in artistas: a['idArtista'] = a.get('idArtistaSQL') or str(a['_id'])
+    
     return render(request, 'albumes/crear.html', {'artistas': artistas})
 
 @verificar_rol(['Admin'])
 def editar_album(request, id):
-    item = get_object_or_404(Album, idAlbum=id)
-    artistas = Artista.objects.all()
+    filtro = {"_id": ObjectId(id)} if len(str(id)) == 24 else {"idAlbumSQL": int(id)}
+    item = db.albumes.find_one(filtro)
 
-    if request.method == 'POST':
-        item.titulo = request.POST.get('titulo')
-        item.fechaLanzamiento = request.POST.get('fechaLanzamiento')
-        item.Artista_idArtista = get_object_or_404(Artista, idArtista=request.POST.get('artista'))
-        
-        # VALIDAR SI EL USUARIO SUBIÓ UNA NUEVA PORTADA
-        nueva_imagen = request.FILES.get('imagen')
-        if nueva_imagen:
-            item.imagen = nueva_imagen  # Solo se reemplaza si viene un archivo nuevo
-            
-        item.save()
+    if not item:
+        messages.error(request, "Álbum no encontrado.")
         return redirect('listar_albumes')
 
-    return render(request, 'albumes/editar.html', {
-        'item': item,
-        'artistas': artistas
-    })
+    if request.method == 'POST':
+        nueva_imagen = request.FILES.get('imagen')
+        imagen_nombre = item.get('imagen', 'default_album.png')
+        
+        if nueva_imagen:
+            fs = FileSystemStorage(location=os.path.join(settings.MEDIA_ROOT, 'albumes'))
+            filename = fs.save(nueva_imagen.name, nueva_imagen)
+            imagen_nombre = filename
+
+        fecha_lanzamiento = request.POST.get('fechaLanzamiento') or item.get('fechaLanzamiento')
+
+        db.albumes.update_one(filtro, {
+            "$set": {
+                "titulo": request.POST.get('titulo'),
+                "fechaLanzamiento": fecha_lanzamiento,
+                "idArtista": request.POST.get('artista'),
+                "imagen": imagen_nombre
+            }
+        })
+        messages.success(request, "Álbum actualizado correctamente.")
+        return redirect('listar_albumes')
+
+    item['id_mongo'] = str(item['_id'])
+    
+    artista_id_raw = item.get('idArtista') or item.get('Artista_idArtista')
+    if artista_id_raw is not None:
+        item['idArtista_actual'] = str(artista_id_raw).strip()
+    else:
+        item['idArtista_actual'] = ""
+    
+    fecha_raw = item.get('fechaLanzamiento', '')
+    if fecha_raw:
+        if hasattr(fecha_raw, 'strftime'):
+            item['fecha_formateada'] = fecha_raw.strftime('%Y-%m-%d')
+        elif isinstance(fecha_raw, str):
+            item['fecha_formateada'] = fecha_raw.split('T')[0]
+        else:
+            item['fecha_formateada'] = str(fecha_raw)
+    else:
+        item['fecha_formateada'] = ""
+
+    artistas = list(db.artistas.find({}, {"_id": 1, "nombreArtistico": 1, "idArtistaSQL": 1}))
+    for a in artistas: 
+        artista_loop_id = a.get('idArtistaSQL') or a['_id']
+        a['idArtista'] = str(artista_loop_id).strip()
+
+    return render(request, 'albumes/editar.html', {'item': item, 'artistas': artistas})
 
 @verificar_rol(['Admin'])
 def eliminar_album(request, id):
-    item = get_object_or_404(Album, idAlbum=id)
-    if request.method == 'POST':
-        item.delete()
-        return redirect('listar_albumes')
+    try:
+        filtro = {"_id": ObjectId(id)} if len(str(id)) == 24 else {"idAlbumSQL": int(id)}
+        album = db.albumes.find_one(filtro)
+        
+        if album:
+            id_referencia = album.get('idAlbumSQL') or str(album['_id'])
+            canciones_vinculadas = db.canciones.count_documents({
+                "$or": [{"idAlbum": id_referencia}, {"Album_idAlbum": id_referencia}, {"idAlbum": str(id_referencia)}]
+            })
+            
+            if canciones_vinculadas > 0:
+                messages.error(request, f"No se puede eliminar. El álbum contiene canciones.")
+                return redirect('listar_albumes')
+
+            imagen_a_borrar = album.get('imagen')
+            db.albumes.delete_one(filtro)
+            
+            if imagen_a_borrar and imagen_a_borrar != 'default_album.png':
+                ruta_completa = os.path.join(settings.MEDIA_ROOT, 'albumes', imagen_a_borrar)
+                if os.path.exists(ruta_completa): os.remove(ruta_completa)
+                    
+            messages.success(request, "Álbum eliminado.")
+    except Exception as e:
+        messages.error(request, f"Fallo al eliminar: {str(e)}")
+        
+    return redirect('listar_albumes')
+
 
 # ==========================================
-# CRUD: CANCIONES
+# CRUD: CANCIONES (100% MONGODB)
 # ==========================================
-
 @verificar_rol(['Admin'])
 def listar_canciones(request):
     query = request.GET.get('q', '').strip()
+    filtro = {"titulo": {"$regex": query, "$options": "i"}} if query else {}
+        
+    canciones_mongo = list(db.canciones.find(filtro))
+    
+    dict_artistas = {}
+    for a in db.artistas.find():
+        if a.get('idArtistaSQL') is not None: dict_artistas[str(a['idArtistaSQL'])] = a
+        dict_artistas[str(a['_id'])] = a
+        
+    dict_albumes = {}
+    for alb in db.albumes.find():
+        if alb.get('idAlbumSQL') is not None: dict_albumes[str(alb['idAlbumSQL'])] = alb
+        dict_albumes[str(alb['_id'])] = alb
+        
+    dict_generos = {}
+    for g in db.generos.find():
+        if g.get('idGeneroSQL') is not None: dict_generos[str(g['idGeneroSQL'])] = g
+        dict_generos[str(g['_id'])] = g
 
-    if query:
-        items = Cancion.objects.filter(titulo__icontains=query)
-    else:
-        items = Cancion.objects.all()
+    for cancion in canciones_mongo:
+        cancion['id_mongo'] = str(cancion['_id'])
+        cancion['idCancion'] = cancion.get('idCancionSQL') or str(cancion['_id'])[-6:].upper()
+        
+        segs = cancion.get('duracionSegundos') or cancion.get('duracion') or 0
+        if isinstance(segs, int) and segs > 0:
+            cancion['duracion_formateada'] = f"{segs // 60}:{segs % 60:02d}"
+        else:
+            cancion['duracion_formateada'] = "0:00"
 
-    return render(request, 'canciones/listar.html', {'items': items})
+        id_alb = str(cancion.get('idAlbum') or cancion.get('Album_idAlbum', ''))
+        album_doc = dict_albumes.get(id_alb)
+        
+        cancion['album_titulo'] = album_doc.get('titulo') if album_doc else "Sencillo"
 
+        if album_doc and album_doc.get('imagen') and album_doc.get('imagen') not in ['default_album.png', 'default_album.jpg', '']:
+            img_name = album_doc.get('imagen')
+            cancion['imagen_url'] = f"{settings.MEDIA_URL}albumes/{img_name}"
+        else:
+            cancion['imagen_url'] = None 
 
-# ------------------------------------------
-# CREAR CANCION (CON IMAGEN)
-# ------------------------------------------
+        id_art = str(cancion.get('idArtista') or cancion.get('Artista_idArtista', ''))
+        artista_doc = dict_artistas.get(id_art)
+        cancion['artista_nombre'] = artista_doc.get('nombreArtistico') if artista_doc else "Artista Independiente"
+
+        nombres_generos = []
+        for gen_item in cancion.get('generos', []):
+            id_sql = str(gen_item.get('idSQL', ''))
+            if id_sql and id_sql in dict_generos:
+                nombres_generos.append(dict_generos[id_sql].get('nombre', ''))
+                
+        if not nombres_generos and isinstance(cancion.get('genero'), str):
+            nombres_generos.append(cancion.get('genero'))
+            
+        cancion['generos_texto'] = ", ".join(nombres_generos) if nombres_generos else "Sin Género"
+
+    return render(request, 'canciones/listar.html', {'items': canciones_mongo})
+
 @verificar_rol(['Admin'])
 def crear_cancion(request):
-    albumes = Album.objects.all()
-
     if request.method == 'POST':
         titulo = request.POST.get('titulo')
         duracion = request.POST.get('duracion')
@@ -431,343 +710,389 @@ def crear_cancion(request):
         fecha = request.POST.get('fechaLanzamiento')
         calidad = request.POST.get('calidadAudio')
         album_id = request.POST.get('album')
-
-        # 👇 IMAGEN (IMPORTANTE)
-        imagen = request.FILES.get('imagen')
-
-        album = get_object_or_404(Album, idAlbum=album_id)
-
-        Cancion.objects.create(
-            titulo=titulo,
-            duracion=duracion,
-            numeroPista=pista,
-            fechaLanzamiento=fecha,
-            calidadAudio=calidad,
-            Album_idAlbum=album,
-            imagen=imagen if imagen else 'canciones/default.png'
-        )
-
+        
+        # Opcional: Subida de MP3 u otra metadata si es necesario
+        
+        nueva_cancion = {
+            "titulo": titulo,
+            "duracionSegundos": int(duracion) if duracion and duracion.isdigit() else 0,
+            "numeroPista": int(pista) if pista and pista.isdigit() else 1,
+            "fechaLanzamiento": fecha,
+            "calidadAudio": calidad,
+            "idAlbum": album_id,
+            # NOTA: Podrías buscar también el idArtista del álbum y agregarlo
+        }
+        
+        db.canciones.insert_one(nueva_cancion)
+        messages.success(request, "Canción creada correctamente en MongoDB.")
         return redirect('listar_canciones')
 
-    return render(request, 'canciones/crear.html', {'albumes': albumes})
+    # Cargar lista de álbumes para el Select
+    albumes_mongo = list(db.albumes.find({}, {"_id": 1, "titulo": 1, "idAlbumSQL": 1}))
+    for a in albumes_mongo:
+        a['idAlbum'] = a.get('idAlbumSQL') or str(a['_id'])
+        
+    return render(request, 'canciones/crear.html', {'albumes': albumes_mongo})
 
-
-# ------------------------------------------
-# EDITAR CANCION (CON IMAGEN)
-# ------------------------------------------
 @verificar_rol(['Admin'])
 def editar_cancion(request, id):
-    item = get_object_or_404(Cancion, idCancion=id)
-    albumes = Album.objects.all()
+    filtro = {"_id": ObjectId(id)} if len(str(id)) == 24 else {"idCancionSQL": int(id)}
+    item = db.canciones.find_one(filtro)
+    
+    if not item:
+        messages.error(request, "Canción no encontrada.")
+        return redirect('listar_canciones')
 
     if request.method == 'POST':
-        fecha = request.POST.get('fechaLanzamiento')
+        duracion = request.POST.get('duracion')
+        pista = request.POST.get('numeroPista')
+        fecha = request.POST.get('fechaLanzamiento') or item.get('fechaLanzamiento')
 
-        item.titulo = request.POST.get('titulo')
-        item.duracion = request.POST.get('duracion')
-        item.numeroPista = request.POST.get('numeroPista')
-        item.calidadAudio = request.POST.get('calidadAudio')
-        item.Album_idAlbum = get_object_or_404(Album, idAlbum=request.POST.get('album'))
-
-        # 🔥 protección contra NULL
-        if fecha:
-            item.fechaLanzamiento = fecha
-
-        # imagen opcional (si la tienes)
-        if request.FILES.get('imagen'):
-            item.imagen = request.FILES['imagen']
-
-        item.save()
+        db.canciones.update_one(filtro, {
+            "$set": {
+                "titulo": request.POST.get('titulo'),
+                "duracionSegundos": int(duracion) if duracion and duracion.isdigit() else item.get('duracionSegundos'),
+                "numeroPista": int(pista) if pista and pista.isdigit() else item.get('numeroPista'),
+                "calidadAudio": request.POST.get('calidadAudio'),
+                "fechaLanzamiento": fecha,
+                "idAlbum": request.POST.get('album')
+            }
+        })
+        messages.success(request, "Canción actualizada exitosamente.")
         return redirect('listar_canciones')
+
+    item['id_mongo'] = str(item['_id'])
+    
+    # Manejo de la variable original de duración para el formulario
+    item['duracion_raw'] = item.get('duracionSegundos') or item.get('duracion') or 0
+    item['idAlbum_actual'] = str(item.get('idAlbum') or item.get('Album_idAlbum') or '')
+    
+    fecha_raw = item.get('fechaLanzamiento', '')
+    if fecha_raw:
+        if hasattr(fecha_raw, 'strftime'):
+            item['fecha_formateada'] = fecha_raw.strftime('%Y-%m-%d')
+        elif isinstance(fecha_raw, str):
+            item['fecha_formateada'] = fecha_raw.split('T')[0]
+        else:
+            item['fecha_formateada'] = str(fecha_raw)
+    else:
+        item['fecha_formateada'] = ""
+
+    albumes_mongo = list(db.albumes.find({}, {"_id": 1, "titulo": 1, "idAlbumSQL": 1}))
+    for a in albumes_mongo:
+        a['idAlbum'] = str(a.get('idAlbumSQL') or a['_id'])
 
     return render(request, 'canciones/editar.html', {
         'item': item,
-        'albumes': albumes
+        'albumes': albumes_mongo
     })
 
-
-# ------------------------------------------
-# ELIMINAR CANCION
-# ------------------------------------------
 @verificar_rol(['Admin'])
 def eliminar_cancion(request, id):
-    item = get_object_or_404(Cancion, idCancion=id)
-
     if request.method == 'POST':
-        item.delete()
-        return redirect('listar_canciones')
+        try:
+            filtro = {"_id": ObjectId(id)} if len(str(id)) == 24 else {"idCancionSQL": int(id)}
+            db.canciones.delete_one(filtro)
+            messages.success(request, "Canción eliminada permanentemente.")
+        except Exception as e:
+            messages.error(request, f"Error al eliminar en MongoDB: {e}")
+            
+    return redirect('listar_canciones')
+
 
 # ==========================================
-# CRUD: GENEROS
+# CRUD: GENEROS - MONGODB
 # ==========================================
 @verificar_rol(['Admin'])
 def listar_generos(request):
     query = request.GET.get('q', '').strip()
-    
-    if query:
-        items = Genero.objects.filter(nombre__icontains=query)
-    else:
-        items = Genero.objects.all()
+    filtro = {"nombre": {"$regex": query, "$options": "i"}} if query else {}
         
-    return render(request, 'generos/listar.html', {'items': items})
+    items_mongo = list(db.generos.find(filtro))
+    
+    for item in items_mongo:
+        item['id_mongo'] = str(item['_id'])
+        item['idGenero'] = item.get('idGeneroSQL') or str(item['_id'])[-6:].upper()
+        item['nombre'] = item.get('nombre', 'Desconocido')
+        
+    return render(request, 'generos/listar.html', {'items': items_mongo})
 
 @verificar_rol(['Admin'])
 def crear_genero(request):
     if request.method == 'POST':
-        nombre = request.POST.get('nombre')
-        Genero.objects.create(nombre=nombre)
-        return redirect('listar_generos')
+        nombre = request.POST.get('nombre', '').strip()
+        if nombre:
+            if db.generos.find_one({"nombre": {"$regex": f"^{nombre}$", "$options": "i"}}):
+                messages.error(request, f"El género '{nombre}' ya existe en el catálogo.")
+            else:
+                db.generos.insert_one({"nombre": nombre})
+                messages.success(request, f"Género '{nombre}' creado exitosamente.")
+                return redirect('listar_generos')
     return render(request, 'generos/crear.html')
 
 @verificar_rol(['Admin'])
 def editar_genero(request, id):
-    item = get_object_or_404(Genero, idGenero=id)
+    filtro = {"_id": ObjectId(id)} if len(str(id)) == 24 else {"idGeneroSQL": int(id)}
+    item = db.generos.find_one(filtro)
+    
     if request.method == 'POST':
-        item.nombre = request.POST.get('nombre')
-        item.save()
-        return redirect('listar_generos')
+        nuevo_nombre = request.POST.get('nombre', '').strip()
+        if nuevo_nombre:
+            db.generos.update_one(filtro, {"$set": {"nombre": nuevo_nombre}})
+            messages.success(request, "El nombre del género ha sido actualizado.")
+            return redirect('listar_generos')
+            
+    if item:
+        item['id_mongo'] = str(item['_id'])
+        
     return render(request, 'generos/editar.html', {'item': item})
 
 @verificar_rol(['Admin'])
 def eliminar_genero(request, id):
-    item = get_object_or_404(Genero, idGenero=id)
-    if request.method == 'POST':
-        item.delete()
-        return redirect('listar_generos')
+    try:
+        filtro = {"_id": ObjectId(id)} if len(str(id)) == 24 else {"idGeneroSQL": int(id)}
+        genero = db.generos.find_one(filtro)
+        
+        if genero:
+            nombre_gen = genero.get('nombre')
+            usos_artistas = db.artistas.count_documents({"genero": nombre_gen})
+            
+            if usos_artistas > 0:
+                messages.error(request, f"No se puede eliminar. Hay {usos_artistas} artista(s) usando el género.")
+            else:
+                db.generos.delete_one(filtro)
+                messages.success(request, "Género eliminado correctamente.")
+        else:
+            messages.error(request, "El género no existe.")
+            
+    except Exception as e:
+        messages.error(request, f"Error al eliminar en MongoDB: {str(e)}")
+        
+    return redirect('listar_generos')
+
 
 # ==========================================
-# CRUD: PLANES
+# CRUD: PLANES (100% MONGODB)
 # ==========================================
 @verificar_rol(['Admin'])
 def listar_planes(request):
-    items = PlanEntity.objects.all()
-    return render(request, 'planes/listar.html', {'items': items})
+    query = request.GET.get('q', '').strip()
+    filtro = {"nombre": {"$regex": query, "$options": "i"}} if query else {}
+        
+    items_mongo = list(db.planes.find(filtro))
+    
+    for item in items_mongo:
+        item['id_mongo'] = str(item['_id'])
+        item['idPlan'] = item.get('idPlanSQL') or str(item['_id'])[-6:].upper()
+        item['precio'] = float(item.get('precio', 0.0))
+        item['duracionMeses'] = int(item.get('duracionMeses', 0))
+        
+    return render(request, 'planes/listar.html', {'items': items_mongo})
 
 @verificar_rol(['Admin'])
 def crear_plan(request):
     if request.method == 'POST':
-        nombre = request.POST.get('nombre')
-        precio = request.POST.get('precio')
-        duracion = request.POST.get('duracionDias')
-        PlanEntity.objects.create(nombre=nombre, precio=precio, duracionDias=duracion)
-        return redirect('listar_planes')
+        nombre = request.POST.get('nombre', '').strip()
+        precio = request.POST.get('precio', 0)
+        duracion = request.POST.get('duracionMeses', 0)
+        
+        if nombre:
+            if db.planes.find_one({"nombre": {"$regex": f"^{nombre}$", "$options": "i"}}):
+                messages.error(request, f"El plan '{nombre}' ya existe.")
+            else:
+                try:
+                    db.planes.insert_one({
+                        "nombre": nombre,
+                        "precio": float(precio),
+                        "duracionMeses": int(duracion)
+                    })
+                    messages.success(request, f"Plan '{nombre}' creado.")
+                    return redirect('listar_planes')
+                except ValueError:
+                    messages.error(request, "Error: Precio y duración deben ser numéricos.")
+                    
     return render(request, 'planes/crear.html')
 
 @verificar_rol(['Admin'])
 def editar_plan(request, id):
-    item = get_object_or_404(PlanEntity, idPlan=id)
-    if request.method == 'POST':
-        item.nombre = request.POST.get('nombre')
-        item.precio = request.POST.get('precio')
-        item.duracionDias = request.POST.get('duracionDias')
-        item.save()
+    filtro = {"_id": ObjectId(id)} if len(str(id)) == 24 else {"idPlanSQL": int(id)}
+    item = db.planes.find_one(filtro)
+    
+    if not item:
+        messages.error(request, "El plan no existe.")
         return redirect('listar_planes')
+
+    if request.method == 'POST':
+        nuevo_nombre = request.POST.get('nombre', '').strip()
+        precio = request.POST.get('precio', 0)
+        duracion = request.POST.get('duracionMeses', 0)
+        
+        try:
+            db.planes.update_one(filtro, {
+                "$set": {
+                    "nombre": nuevo_nombre,
+                    "precio": float(precio),
+                    "duracionMeses": int(duracion)
+                }
+            })
+            messages.success(request, "Plan actualizado correctamente.")
+            return redirect('listar_planes')
+        except ValueError:
+            messages.error(request, "Error: Precio y duración numéricos.")
+            
+    item['id_mongo'] = str(item['_id'])
+    if item.get('precio') is not None:
+        item['precio_formateado'] = f"{float(item['precio']):.2f}"
+        
     return render(request, 'planes/editar.html', {'item': item})
 
 @verificar_rol(['Admin'])
 def eliminar_plan(request, id):
-    item = get_object_or_404(PlanEntity, idPlan=id)
-    if request.method == 'POST':
-        item.delete()
-        return redirect('listar_planes')
-
-# ==========================================
-# CRUD: USUARIOS
-# ==========================================
-
-@verificar_rol(['Admin'])
-def crear_usuario(request):
-    if request.method == 'POST':
-        nombre = request.POST.get('nombre', '').strip()
-        apellido = request.POST.get('apellido', '').strip()
-        correo = request.POST.get('correo', '').strip()
-        fecha_nacimiento = request.POST.get('fechaNacimiento', '').strip()
-        contrasenia = request.POST.get('contrasenia', '').strip()
-        rol_id = request.POST.get('rol', 2) 
-
-        errores = []
-        if not nombre: errores.append("El nombre es obligatorio")
-        if not apellido: errores.append("El apellido es obligatorio")
-        if not correo: errores.append("El correo es obligatorio")
-        if not contrasenia: errores.append("La contraseña es obligatoria")
-        
-        fecha_nacimiento_dt = None
-        if not fecha_nacimiento:
-            errores.append("La fecha de nacimiento es obligatoria")
-        else:
-            try: fecha_nacimiento_dt = date.fromisoformat(fecha_nacimiento)
-            except ValueError: errores.append("La fecha de nacimiento no tiene un formato válido (YYYY-MM-DD)")
-        
-        if errores:
-            for e in errores: messages.error(request, e)
-            return render(request, 'usuarios/crear.html')
-        
-        rol_obj = get_object_or_404(Rol, idRol=rol_id)
-
-        Usuario.objects.create(
-            nombre=nombre, apellido=apellido, correo=correo, contrasenia=contrasenia,
-            fechaRegistro=date.today(), estado='Activo', imagen='default.png', 
-            fechaNacimiento=fecha_nacimiento_dt,
-            Rol_idRol=rol_obj 
-        )
-        messages.success(request, "Usuario creado correctamente")
-        return redirect('listar_usuarios') # Corregido: apuntaba a 'listar' y tu vista se llama 'listar_usuarios'
-    
-    roles = Rol.objects.all()
-    return render(request, 'usuarios/crear.html', {'roles': roles})
-
-@verificar_rol(['Admin'])
-def editar_usuario(request, id):
-    usuario = get_object_or_404(Usuario, idUsuario=id)
-    roles = Rol.objects.all() 
-    
-    if request.method == 'POST':
-        usuario.nombre = request.POST.get('nombre', '').strip()
-        usuario.apellido = request.POST.get('apellido', '').strip()
-        usuario.correo = request.POST.get('correo', '').strip()
-        usuario.estado = request.POST.get('estado', '').strip()
-        
-        if request.POST.get('fechaNacimiento'):
-            usuario.fechaNacimiento = request.POST.get('fechaNacimiento')
-            
-        id_rol = request.POST.get('rol')
-        if id_rol:
-            usuario.Rol_idRol_id = int(id_rol)
-            
-        usuario.save()
-        
-        # CONFIRMACIÓN VISUAL: Agregamos una notificación de éxito
-        messages.success(request, f"El perfil de '{usuario.nombre} {usuario.apellido}' ha sido actualizado exitosamente.")
-        return redirect('listar_usuarios')
-        
-    return render(request, 'usuarios/editar.html', {
-        'usuario': usuario,
-        'roles': roles
-    })
-
-@verificar_rol(['Admin'])
-def eliminar_usuario(request, id):
-    usuario = get_object_or_404(Usuario, idUsuario=id)
-    # Quitamos el "if request.method == 'POST'" para que acepte el viaje directo de SweetAlert2
     try:
-        usuario.delete()
-        messages.success(request, "Usuario eliminado correctamente de la plataforma.")
+        filtro = {"_id": ObjectId(id)} if len(str(id)) == 24 else {"idPlanSQL": int(id)}
+        plan = db.planes.find_one(filtro)
+        
+        if plan:
+            nombre_plan = plan.get('nombre')
+            usuarios_suscritos = db.usuarios.count_documents({"suscripcion.plan": nombre_plan})
+            
+            id_ref = plan.get('idPlanSQL')
+            condiciones_pagos = [{"plan": nombre_plan}]
+            if id_ref: condiciones_pagos.append({"idPlan": int(id_ref)})
+            
+            pagos_vinculados = db.pagos.count_documents({"$or": condiciones_pagos})
+            
+            if usuarios_suscritos > 0 or pagos_vinculados > 0:
+                messages.error(request, f"Plan en uso. Protegido por integridad NoSQL.")
+            else:
+                db.planes.delete_one(filtro)
+                messages.success(request, f"Plan eliminado.")
+        else:
+            messages.error(request, "Plan no encontrado.")
+            
     except Exception as e:
-        # SQL Server frenará el borrado si el usuario tiene playlists, reproducciones, etc.
-        messages.error(request, "No se pudo eliminar el usuario debido a dependencias activas en la base de datos.")
-    
-    # Este return ahora sí se ejecuta siempre, sin importar si es GET o POST
-    return redirect('listar_usuarios')
+        messages.error(request, f"Error MongoDB: {str(e)}")
+        
+    return redirect('listar_planes')
     
 # ==========================================
-# SISTEMA DE AUTENTICACIÓN (LOGIN / LOGOUT)
+# SISTEMA DE AUTENTICACIÓN (100% MONGODB)
 # ==========================================
-
 def login_view(request):
+    if 'usuario_id' in request.session:
+        rol_activo = request.session.get('usuario_rol', 'Cliente') 
+        if rol_activo == 'Admin':
+            return redirect('index') 
+        elif rol_activo == 'Artista':
+            return redirect('dashboard_artista')
+        else:
+            return redirect('dashboard_usuario')
+
     if request.method == 'POST':
         correo = request.POST.get('correo', '').strip()
-        contrasenia = request.POST.get('contrasenia', '').strip()
+        password_ingresada = request.POST.get('contrasenia', '')
 
-        if not correo or not contrasenia:
-            messages.error(request, "Por favor, completa todos los campos.")
-            return render(request, 'auth/login.html')
+        if not correo or not password_ingresada:
+            messages.error(request, 'Complete todos los campos.')
+            return render(request, 'login.html')
 
         try:
-            usuario = Usuario.objects.get(correo=correo)
-            
-            if usuario.contrasenia == contrasenia:
-                if usuario.estado != 'Activo':
-                    messages.error(request, f"Tu cuenta se encuentra: {usuario.estado}. Contacta al administrador.")
-                    return render(request, 'auth/login.html')
+            usuario = db.usuarios.find_one({
+                "correo": correo,
+                "contrasenia": password_ingresada
+            })
+
+            if usuario:
+                if usuario.get('estado') != 'Activo':
+                    messages.error(request, 'Cuenta inactiva.')
+                    return render(request, 'login.html')
+
+                request.session['usuario_id'] = str(usuario['_id'])
                 
-                # Variables de sesión
-                request.session['usuario_id'] = usuario.idUsuario
-                request.session['usuario_nombre'] = f"{usuario.nombre} {usuario.apellido}"
-                request.session['usuario_rol'] = usuario.Rol_idRol.nombre
-                
-                # REDIRECCIÓN DINÁMICA POR ROL
-                if usuario.Rol_idRol.nombre == 'Admin':
-                    return redirect('index')
-                elif usuario.Rol_idRol.nombre == 'Artista':
-                    return redirect('dashboard_artista')
+                rol_bd = usuario.get('rol', 'Cliente')
+                if rol_bd == 'Administrador':
+                    request.session['usuario_rol'] = 'Admin'
                 else:
-                    return redirect('dashboard_usuario')
+                    request.session['usuario_rol'] = rol_bd
+
+                request.session['nombre'] = usuario.get('nombre', '')
+                request.session['apellido'] = usuario.get('apellido', '')
+
+                rol = request.session['usuario_rol']
+                
+                if rol == 'Admin':
+                    return redirect('index') 
+                elif rol == 'Artista':
+                    return redirect('dashboard_artista') 
+                else:
+                    return redirect('dashboard_usuario') 
+
             else:
-                messages.error(request, "Contraseña incorrecta.")
-        except Usuario.DoesNotExist:
-            messages.error(request, "El correo electrónico no está registrado.")
+                messages.error(request, 'Credenciales incorrectas.')
+
+        except Exception as e:
+            messages.error(request, f'Error BD: {str(e)}')
 
     return render(request, 'auth/login.html')
 
 def registro_view(request):
     if request.method == 'POST':
-        # 1. Capturar los datos enviados por el usuario
         nombre = request.POST.get('nombre', '').strip()
         apellido = request.POST.get('apellido', '').strip()
         correo = request.POST.get('correo', '').strip()
         contrasenia = request.POST.get('contrasenia', '').strip()
         fecha_nacimiento = request.POST.get('fecha_nacimiento', '').strip()
         
-        # Validar que no existan campos vacíos
         if not all([nombre, apellido, correo, contrasenia, fecha_nacimiento]):
-            messages.error(request, "Por favor, completa todos los campos obligatorios.")
+            messages.error(request, "Completa todos los campos obligatorios.")
             return render(request, 'auth/registro.html')
 
-        # Asignamos una imagen por defecto, ya que es obligatoria en la base de datos
-        imagen_default = 'usuario_nuevo.png'
-        # El rol por defecto será 2 (Cliente)
-        rol_cliente = 2 
+        try:
+            if db.usuarios.find_one({"correo": correo}):
+                messages.error(request, "Este correo ya está en uso.")
+                return render(request, 'auth/registro.html')
+            
+            nuevo_usuario = {
+                "nombre": nombre,
+                "apellido": apellido,
+                "correo": correo,
+                "contrasenia": contrasenia,
+                "fechaNacimiento": fecha_nacimiento,
+                "fechaRegistro": datetime.now(),
+                "estado": "Activo",
+                "rol": "Cliente",
+                "imagen": "usuario_nuevo.png",
+                "suscripcion": {
+                    "plan": "Free",
+                    "estado": "Activa"
+                }
+            }
+            
+            db.usuarios.insert_one(nuevo_usuario)
+            messages.success(request, "¡Cuenta creada con éxito! Inicia sesión.")
+            return redirect('login')
+            
+        except Exception as e:
+            messages.error(request, f"Error NoSQL: {str(e)}")
 
-        # 2. Ejecutar el Procedimiento Almacenado
-        with connection.cursor() as cursor:
-            try:
-                cursor.execute("""
-                    EXEC Usuarios.sp_RegistrarUsuario 
-                        @nombre = %s,
-                        @apellido = %s,
-                        @correo = %s,
-                        @contrasenia = %s,
-                        @imagen = %s,
-                        @fechaNacimiento = %s,
-                        @Rol_idRol = %s
-                """, [nombre, apellido, correo, contrasenia, imagen_default, fecha_nacimiento, rol_cliente])
-                
-                # El SP retorna: SELECT 1 AS Estado, 'Mensaje' AS Mensaje
-                resultado = cursor.fetchone()
-                
-                if resultado and resultado[0] == 1:
-                    # Registro exitoso
-                    messages.success(request, "¡Cuenta creada con éxito! Ahora puedes iniciar sesión.")
-                    return redirect('login')
-                else:
-                    # Error controlado desde el SP (ej. correo duplicado)
-                    error_msg = resultado[1] if resultado else "Error desconocido al registrar."
-                    messages.error(request, f"Error: {error_msg}")
-                    
-            except Exception as e:
-                # Error de ejecución o conexión
-                messages.error(request, f"Ocurrió un error en el servidor: {str(e)}")
-
-    # Si es método GET, solo mostramos el formulario vacío
     return render(request, 'auth/registro.html')
 
-# ==========================================
-# DASHBOARDS E INTEGRACIÓN DE OBJETOS SQL
-# ==========================================
+def logout_view(request):
+    request.session.flush()
+    messages.success(request, "Sesión cerrada correctamente.")
+    return redirect('login')
 
-def dictfetchall(cursor):
-    """Devuelve todas las filas de un cursor como un diccionario (clave-valor)."""
-    columns = [col[0] for col in cursor.description]
-    return [dict(zip(columns, row)) for row in cursor.fetchall()]
 
+# ==========================================
+# DASHBOARDS E INTEGRACIÓN MONGODB
+# ==========================================
 @verificar_rol(['Cliente', 'Admin'])
 def dashboard_usuario(request):
     usuario_id = request.session.get('usuario_id')
     if not usuario_id:
         return redirect('login')
-
-    top_canciones = []
-    playlists_usuario = []
+        
+    top_canciones, playlists_usuario = [], []
     auto_open_id = request.session.pop('auto_open_playlist_id', None)
 
     # ========================================================
@@ -814,249 +1139,377 @@ def dashboard_usuario(request):
     # ========================================================
     # PLAYLISTS (MONGODB)
     # ========================================================
+
+    # 1. Búsqueda robusta del usuario actual
     try:
-        playlists_mongo = db.playlists.find({"idUsuarioSQL": usuario_id})
+        user_query = {"_id": ObjectId(usuario_id)}
+    except:
+        user_query = {"idUsuarioSQL": int(usuario_id)}
+        
+    usuario = db.usuarios.find_one(user_query)
+    plan_info = {'plan_nombre': 'Free', 'suscripcion_estado': 'Inactiva'}
+    
+    if usuario:
+        # Extraemos su ID oficial o SQL para las consultas siguientes
+        id_real_usuario = usuario.get('idUsuarioSQL') or str(usuario['_id'])
+        
+        if 'suscripcion' in usuario:
+            plan_info = {
+                'plan_nombre': usuario['suscripcion'].get('plan', 'Free'),
+                'suscripcion_estado': usuario['suscripcion'].get('estado', 'Activa')
+            }
 
-        for p in playlists_mongo:
-            playlists_usuario.append(
-                (str(p['_id']), p.get('nombre', 'Sin nombre'))
-            )
-
-    except Exception as e:
-        print(f"Error al leer Playlists de Mongo: {e}")
-
-    # ========================================================
-    # RECOMENDACIONES (FIX DEFINITIVO)
-    # ========================================================
-    recomendaciones = []
-
-    with connection.cursor() as cursor:
+        # 2. Cargar Playlists del usuario
+        condicion_playlists = [
+            {"idUsuario": str(id_real_usuario)},
+            {"idUsuario": int(id_real_usuario) if str(id_real_usuario).isdigit() else None},
+            {"idUsuarioSQL": int(id_real_usuario) if str(id_real_usuario).isdigit() else None}
+        ]
+        
         try:
-            cursor.execute(
-                "EXEC Reportes.sp_RecomendacionesPersonalizadas %s",
-                [usuario_id]
-            )
+            playlists_mongo = list(db.playlists.find({"$or": condicion_playlists}))
+            for p in playlists_mongo:
+                # Retornamos el ID de mongo y el nombre para el panel lateral
+                playlists_usuario.append((str(p['_id']), p.get('nombre', 'Sin nombre')))
+        except Exception as e:
+            print(f"Error cargando Playlists: {e}")
 
-            columns_rec = [col[0] for col in cursor.description]
-            raw_recs = [
-                dict(zip(columns_rec, row))
-                for row in cursor.fetchall()
+        # 3. AGGREGATION PIPELINE: "Lo que más escuchas" (Top 5 del usuario)
+        try:
+            pipeline_top = [
+                # a) Filtramos solo reproducciones de este usuario
+                {
+                    "$match": {
+                        "$or": [
+                            {"idUsuario": str(id_real_usuario)},
+                            {"idUsuario": int(id_real_usuario) if str(id_real_usuario).isdigit() else None},
+                            {"idUsuarioSQL": int(id_real_usuario) if str(id_real_usuario).isdigit() else None}
+                        ]
+                    }
+                },
+                # b) Agrupamos por canción y sumamos reproducciones y minutos
+                {
+                    "$group": {
+                        "_id": "$idCancionSQL", 
+                        "reproducciones": {"$sum": 1},
+                        "total_escuchado": {"$sum": "$duracionEscuchada"}
+                    }
+                },
+                # c) Ordenamos por lo más escuchado
+                {"$sort": {"reproducciones": -1}},
+                {"$limit": 5},
+                # d) Traemos los datos de la canción
+                {
+                    "$lookup": {
+                        "from": "canciones",
+                        "localField": "_id",
+                        "foreignField": "idCancionSQL", 
+                        "as": "cancion_info"
+                    }
+                },
+                {"$unwind": {"path": "$cancion_info", "preserveNullAndEmptyArrays": True}}
             ]
+            
+            resultados_top = list(db.reproducciones.aggregate(pipeline_top))
+            
+            # Traer artistas a memoria RAM O(1) para cruzar rápido
+            dict_art = {str(a.get('idArtistaSQL') or a['_id']): a.get('nombreArtistico', 'Desconocido') for a in db.artistas.find()}
+            
+            for r in resultados_top:
+                c_info = r.get('cancion_info', {})
+                if c_info:
+                    id_art = str(c_info.get('idArtista') or '')
+                    # Formato de tiempo (minutos y segundos)
+                    segs = c_info.get('duracionSegundos') or c_info.get('duracion') or 0
+                    duracion_fmt = f"{segs // 60}:{segs % 60:02d}" if isinstance(segs, int) else "0:00"
 
-            for r in raw_recs:
-                id_can = r.get('idCancion') or r.get('id_cancion') or r.get('id')
-                tit_can = r.get('Cancion') or r.get('titulo')
-                art_can = r.get('Artista') or r.get('nombreArtistico') or r.get('nombre')
-                alb_can = r.get('Album') or r.get('album_titulo') or 'Sencillo'
-
-                if id_can:
-                    cursor.execute("""
-                        SELECT imagen
-                        FROM Catalogo.Cancion
-                        WHERE idCancion = %s
-                    """, [id_can])
-
-                    img_row = cursor.fetchone()
-
-                    recomendaciones.append({
-                        'idCancion': id_can,
-                        'Cancion': tit_can,
-                        'Artista': art_can,
-                        'Album': alb_can,
-                        'imagen': img_row[0] if img_row else None
+                    top_canciones.append({
+                        'idCancion': c_info.get('idCancionSQL') or str(c_info['_id']),
+                        'titulo': c_info.get('titulo', 'Desconocido'),
+                        'artista_nombre': dict_art.get(id_art, 'Desconocido'),
+                        'duracion': duracion_fmt,
+                        'calidadAudio': c_info.get('calidadAudio', 'Estándar')
                     })
-
         except Exception as e:
-            print(f"Error recomendaciones: {e}")
-            recomendaciones = []
+            print(f"Error Pipeline Top: {e}")
 
-    # ========================================================
-    # PLAN USUARIO
-    # ========================================================
-    plan_info = {
-        'plan_nombre': 'Free',
-        'suscripcion_estado': 'Activa'
-    }
-
-    with connection.cursor() as cursor:
+    # 4. RECOMENDACIONES (Aleatorias)
+    recomendaciones = request.session.get('recomendaciones_cache')
+    if not recomendaciones:
+        recomendaciones = []
         try:
-            cursor.execute("""
-                SELECT TOP 1 P.nombre, S.estado
-                FROM Facturacion.Suscripcion S
-                INNER JOIN Facturacion.PlanEntity P 
-                    ON S.PlanEntity_idPlan = P.idPlan
-                WHERE S.Usuario_idUsuario = %s 
-                  AND S.estado = 'Activa'
-                ORDER BY S.idSuscripcion DESC
-            """, [usuario_id])
+            dict_art = {str(a.get('idArtistaSQL') or a['_id']): a.get('nombreArtistico', 'Desconocido') for a in db.artistas.find()}
+            recs_mongo = list(db.canciones.aggregate([{"$sample": {"size": 5}}]))
+            
+            for c in recs_mongo:
+                id_art = str(c.get('idArtista') or '')
+                segs = c.get('duracionSegundos') or c.get('duracion') or 0
+                duracion_fmt = f"{segs // 60}:{segs % 60:02d}" if isinstance(segs, int) else "0:00"
 
-            plan_row = cursor.fetchone()
+                recomendaciones.append({
+                    'idCancion': c.get('idCancionSQL') or str(c['_id']),
+                    'titulo': c.get('titulo', 'Desconocido'),
+                    'artista_nombre': dict_art.get(id_art, 'Desconocido'),
+                    'duracion': duracion_fmt,
+                    'calidadAudio': c.get('calidadAudio', 'Estándar')
+                })
+            request.session['recomendaciones_cache'] = recomendaciones
+        except Exception:
+            pass
 
-            if plan_row:
-                plan_info = {
-                    'plan_nombre': plan_row[0],
-                    'suscripcion_estado': plan_row[1]
-                }
-
-        except Exception as e:
-            print(f"Error plan_info: {e}")
-
-    # ========================================================
-    # CONTEXT
-    # ========================================================
     context = {
         'top_canciones': top_canciones,
         'recomendaciones': recomendaciones,
         'plan_info': plan_info,
         'playlists': playlists_usuario,
         'auto_open_playlist_id': auto_open_id,
+        'usuario_nombre': f"{usuario.get('nombre', '')} {usuario.get('apellido', '')}" if usuario else ""
     }
-
+    
     return render(request, 'dashboards/usuario.html', context)
+
+
+def _obtener_artista_de_sesion(request):
+    """Busca el documento de artista vinculado al usuario en sesión,
+    contemplando los distintos formatos de idUsuario heredados de la
+    migración SQL -> Mongo (ObjectId nuevo o idUsuarioSQL viejo)."""
+    usuario_id = request.session.get('usuario_id')
+    if not usuario_id:
+        return None
+
+    try:
+        usuario_obj = db.usuarios.find_one({"_id": ObjectId(usuario_id)})
+    except Exception:
+        usuario_obj = None
+
+    if not usuario_obj:
+        return None
+
+    id_mongo_str = str(usuario_obj['_id'])
+    id_sql = usuario_obj.get('idUsuarioSQL')
+
+    condiciones_busqueda = [
+        {"idUsuario": id_mongo_str},
+        {"Usuario_idUsuario": id_mongo_str},
+        {"idUsuario": usuario_obj['_id']}
+    ]
+
+    if id_sql is not None:
+        condiciones_busqueda.extend([
+            {"idUsuario": str(id_sql)},
+            {"idUsuario": int(id_sql)},
+            {"Usuario_idUsuario": str(id_sql)},
+            {"Usuario_idUsuario": int(id_sql)}
+        ])
+
+    return db.artistas.find_one({
+        "$and": [
+            {"$or": condiciones_busqueda},
+            {"idUsuario": {"$ne": ""}},
+            {"idUsuario": {"$ne": None}}
+        ]
+    })
+
 
 @verificar_rol(['Artista', 'Admin'])
 def dashboard_artista(request):
+    if not request.session.get('usuario_id'):
+        messages.error(request, "Sesión inválida. Por favor, inicia sesión de nuevo.")
+        return redirect('login')
+
+    artista = _obtener_artista_de_sesion(request)
+
+    if not artista:
+        messages.warning(request, "Tu cuenta de artista no tiene un perfil vinculado. Contacta a un administrador.")
+        return render(request, 'dashboards/artista.html', {
+            'artista': None, 'total_reproducciones': 0, 'total_regalias': 0.0, 'canciones_recientes': []
+        })
+
+    id_artista_metrica = artista.get('idArtistaSQL') or str(artista['_id'])
+
+    total_reproducciones = 0
+    total_regalias = 0.0
+
+    try:
+        pipeline_reproducciones = [
+            {
+                "$lookup": {
+                    "from": "canciones",
+                    "localField": "idCancion",
+                    "foreignField": "idCancionSQL",
+                    "as": "cancion_info"
+                }
+            },
+            { "$unwind": "$cancion_info" },
+            {
+                "$match": {
+                    "$or": [
+                        {"cancion_info.idArtista": id_artista_metrica},
+                        {"cancion_info.idArtista": int(id_artista_metrica) if str(id_artista_metrica).isdigit() else None}
+                    ]
+                }
+            },
+            {
+                "$group": {
+                    "_id": None,
+                    "total_segundos": {"$sum": "$duracionEscuchada"}
+                }
+            }
+        ]
+
+        resultado_rep = list(db.reproducciones.aggregate(pipeline_reproducciones))
+        if resultado_rep:
+            total_reproducciones = round(resultado_rep[0].get('total_segundos', 0) / 60)
+
+        pipeline_regalias = [
+            {
+                "$match": {
+                    "$or": [
+                        {"idArtista": id_artista_metrica},
+                        {"idArtista": int(id_artista_metrica) if str(id_artista_metrica).isdigit() else None}
+                    ]
+                }
+            },
+            {
+                "$group": {
+                    "_id": None,
+                    "total_dinero": {"$sum": "$monto"}
+                }
+            }
+        ]
+
+        resultado_reg = list(db.regalias.aggregate(pipeline_regalias))
+        if resultado_reg:
+            total_regalias = round(resultado_reg[0].get('total_dinero', 0.0), 2)
+
+    except Exception as e:
+        print(f"[ERROR Métricas Artista]: {str(e)}")
+
+    canciones_artista = list(db.canciones.find({
+        "$or": [
+            {"idArtista": id_artista_metrica},
+            {"idArtista": int(id_artista_metrica) if str(id_artista_metrica).isdigit() else None}
+        ]
+    }).limit(5))
+
+    for c in canciones_artista:
+        segs = c.get('duracionSegundos') or c.get('duracion') or 0
+        if isinstance(segs, int) and segs > 0:
+            c['duracion_formateada'] = f"{segs // 60}:{segs % 60:02d}"
+        else:
+            c['duracion_formateada'] = "0:00"
+
+    artista_context = {
+        'nombreArtistico': artista.get('nombreArtistico') or artista.get('nombre') or 'Desconocido',
+        'verificado': bool(artista.get('verificado', False)),
+        'genero': artista.get('genero') or artista.get('generoPrincipal') or 'Independiente',
+        'pais': artista.get('pais', 'No especificado'),
+        'biografia': artista.get('biografia', 'Sin biografía disponible.')
+    }
+
+    img_name = artista.get('imagen')
+    if img_name and img_name != 'default_artist.png':
+        if not img_name.startswith('artistas/'):
+            img_name = f"artistas/{img_name}"
+        artista_context['imagen_url'] = f"{settings.STATIC_URL}images/{img_name}"
+    else:
+        artista_context['imagen_url'] = f"{settings.STATIC_URL}images/default_artist.png"
+
+    # CARGAR ÁLBUMES DEL ARTISTA PARA EL MODAL (comparando string e int)
+    id_artista_str = str(id_artista_metrica)
+    id_artista_int = int(id_artista_str) if id_artista_str.isdigit() else None
+
+    condiciones_albumes = [
+        {"idArtista": id_artista_str},
+        {"idArtista": id_artista_int},
+        {"Artista_idArtista": id_artista_str},
+        {"Artista_idArtista": id_artista_int}
+    ]
+
+    albumes_artista_db = list(db.albumes.find({"$or": condiciones_albumes}))
+    for alb in albumes_artista_db:
+        alb['id_mongo'] = str(alb['_id'])
+
+    context = {
+        'artista': artista_context,
+        'total_reproducciones': total_reproducciones,
+        'total_regalias': total_regalias,
+        'canciones_recientes': canciones_artista,
+        'albums_artista': albumes_artista_db
+    }
+
+    return render(request, 'dashboards/artista.html', context)
+
+
+# ==========================================
+# PROCESOS COMPLEMENTARIOS (PAGOS, MANTENIMIENTO, PLAYLISTS)
+# ==========================================
+
+@verificar_rol(['Cliente', 'Admin'])
+def procesar_pago(request):
     usuario_id = request.session.get('usuario_id')
     if not usuario_id:
         return redirect('login')
         
-    artista = None
-    total_regalias = 0
-    minutos_cancion_demo = 0
-    canciones_artista = []
-    albums_artista = []
-    art_cols = []  
-    
-    with connection.cursor() as cursor:
-        try:
-            # 1. Inspeccionar columnas para blindaje de lógicas dinámicas
-            cursor.execute("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'Catalogo' AND TABLE_NAME = 'Artista'")
-            art_cols = [row[0] for row in cursor.fetchall()]
-            
-            col_art_nombre = 'nombreArtistico' if 'nombreArtistico' in art_cols else ('nombre_artistico' if 'nombre_artistico' in art_cols else 'nombre')
-            col_art_usuario = 'Usuario_idUsuario' if 'Usuario_idUsuario' in art_cols else ('idUsuario' if 'idUsuario' in art_cols else ('Usuario_id' if 'Usuario_id' in art_cols else 'idArtista'))
-            
-            cursor.execute("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'Catalogo' AND TABLE_NAME = 'Album'")
-            alb_cols = [row[0] for row in cursor.fetchall()]
-            col_alb_artista = 'Artista_idArtista' if 'Artista_idArtista' in alb_cols else ('idArtista' if 'idArtista' in alb_cols else 'Artista_id')
-            
-            cursor.execute("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'Catalogo' AND TABLE_NAME = 'Cancion'")
-            can_cols = [row[0] for row in cursor.fetchall()]
-            col_can_album = 'Album_idAlbum' if 'Album_idAlbum' in can_cols else ('idAlbum' if 'idAlbum' in can_cols else 'Album_id')
-
-            # --- EJECUCIÓN CON ENLACE DIRECTO ---
-            query_artista = f"SELECT idArtista, {col_art_nombre} FROM Catalogo.Artista WHERE {col_art_usuario} = %s"
-            cursor.execute(query_artista, [usuario_id])
-            artista_row = cursor.fetchone()
-            
-            if artista_row:
-                id_artista = artista_row[0]
-                artista = {'idArtista': id_artista, 'nombreArtistico': artista_row[1]}
-                
-                cursor.execute("SELECT Facturacion.fn_TotalRegaliaArtista(%s)", [id_artista])
-                regalias_row = cursor.fetchone()
-                total_regalias = regalias_row[0] if regalias_row and regalias_row[0] is not None else 0
-                
-                cursor.execute(f"""
-                    SELECT TOP 1 Usuarios.fn_MinutosReproduccionCancion(idCancion)
-                    FROM Catalogo.Cancion 
-                    WHERE {col_can_album} IN (SELECT idAlbum FROM Catalogo.Album WHERE {col_alb_artista} = %s)
-                """, [id_artista])
-                minutos_row = cursor.fetchone()
-                minutos_cancion_demo = minutos_row[0] if minutos_row and minutos_row[0] is not None else 0
-                
-                cursor.execute(f"""
-                    SELECT C.titulo, C.duracion, C.calidadAudio, A.titulo AS album_titulo 
-                    FROM Catalogo.Cancion C
-                    INNER JOIN Catalogo.Album A ON C.{col_can_album} = A.idAlbum
-                    WHERE A.{col_alb_artista} = %s
-                """, [id_artista])
-                raw_canciones = cursor.fetchall()
-                
-                canciones_artista = [
-                    {
-                        'titulo': r[0],
-                        'duracion': r[1],
-                        'calidadAudio': r[2],
-                        'Album_idAlbum': {'titulo': r[3]}
-                    } for r in raw_canciones
-                ]
-                
-                cursor.execute(f"SELECT idAlbum, titulo FROM Catalogo.Album WHERE {col_alb_artista} = %s", [id_artista])
-                albums_artista = cursor.fetchall()
-                
-        except Exception as e:
-            messages.error(request, f"Error al interactuar con la Base de Datos: {str(e)}")
-
-    context = {
-        'artista': artista,
-        'total_regalias': total_regalias,
-        'minutos_cancion_demo': minutos_cancion_demo,
-        'canciones_artista': canciones_artista,
-        'albums_artista': albums_artista,
-        'columnas_encontradas': art_cols,  # <-- Enviado para activar el panel de diagnóstico
-    }
-    return render(request, 'dashboards/artista.html', context)
-
-@verificar_rol(['Cliente', 'Admin'])
-def procesar_pago(request):
-    if 'usuario_id' not in request.session:
-        return redirect('login')
-        
-    usuario_id = request.session['usuario_id']
-    
     if request.method == 'POST':
-        metodo = request.POST.get('metodo') # 'PayPal', 'Tarjeta' o 'Transferencia'
-        monto = 9.99  # Precio establecido para el plan Premium
+        metodo = request.POST.get('metodo') 
+        monto = 9.99 
         
-        with connection.cursor() as cursor:
-            # 1. Validar si el usuario ya cuenta con un registro de suscripción Premium (Plan 2)
-            cursor.execute("""
-                SELECT idSuscripcion FROM Facturacion.Suscripcion 
-                WHERE Usuario_idUsuario = %s AND PlanEntity_idPlan = 2
-            """, [usuario_id])
-            row = cursor.fetchone()
+        try:
+            try:
+                user_query = {"_id": ObjectId(usuario_id)}
+            except:
+                user_query = {"idUsuarioSQL": int(usuario_id)}
+                
+            db.usuarios.update_one(
+                user_query,
+                {"$set": {
+                    "suscripcion.plan": "Premium",
+                    "suscripcion.estado": "Activa"
+                }}
+            )
             
-            if row:
-                id_suscripcion = row[0]
-                cursor.execute("UPDATE Facturacion.Suscripcion SET estado = 'Activa' WHERE idSuscripcion = %s", [id_suscripcion])
-            else:
-                # Crear una nueva suscripción Premium activa por 30 días
-                cursor.execute("""
-                    INSERT INTO Facturacion.Suscripcion (fechaInicio, fechaFin, estado, Usuario_idUsuario, PlanEntity_idPlan)
-                    VALUES (GETDATE(), DATEADD(day, 30, GETDATE()), 'Activa', %s, 2)
-                """, [usuario_id])
-                cursor.execute("SELECT @@IDENTITY")
-                id_suscripcion = cursor.fetchone()[0]
+            nuevo_pago = {
+                "idUsuario": usuario_id,
+                "monto": monto,
+                "metodo": metodo,
+                "fechaGeneracion": datetime.now(),
+                "estado": "Completado"
+            }
+            db.pagos.insert_one(nuevo_pago)
             
-            # 2. CONSUMO DE OBJETO PROGRAMABLE: Registrar el Pago ejecutando el SP
-            cursor.execute("""
-                EXEC Facturacion.sp_RegistrarPago 
-                    @monto = %s, 
-                    @metodo = %s, 
-                    @idSuscripcion = %s
-            """, [monto, metodo, id_suscripcion])
+            messages.success(request, "¡Transacción completada! Tu cuenta ha sido actualizada a Premium 💎")
+            return redirect('dashboard_usuario')
             
-        messages.success(request, "¡Transacción completada! Tu cuenta ha sido actualizada a Premium")
-        return redirect('dashboard_usuario')
-        
+        except Exception as e:
+            messages.error(request, f"Error al procesar el pago en MongoDB: {str(e)}")
+            
     return render(request, 'dashboards/facturacion.html')
 
 @verificar_rol(['Admin'])
 def verificar_suscripciones(request):
-    # Verificación de seguridad: Solo el Admin puede ejecutar esto
     if 'usuario_id' not in request.session or request.session.get('usuario_rol') != 'Admin':
-        messages.error(request, "Acceso denegado. Esta acción es exclusiva para administradores.")
+        messages.error(request, "Acceso denegado. Exclusivo para administradores.")
         return redirect('login')
         
     try:
-        with connection.cursor() as cursor:
-            # Consumo del Procedimiento Almacenado que contiene el Cursor
-            cursor.execute("EXEC Facturacion.sp_VerificarSuscripcionesVencidas")
+        fecha_actual = datetime.now()
+        resultado = db.usuarios.update_many(
+            {
+                "suscripcion.plan": "Premium",
+                "suscripcion.fechaFin": {"$lt": fecha_actual}
+            },
+            {
+                "$set": {
+                    "suscripcion.plan": "Free",
+                    "suscripcion.estado": "Vencida"
+                }
+            }
+        )
             
-        messages.success(request, "⚙️ Mantenimiento completado: El cursor ha verificado y actualizado las suscripciones vencidas exitosamente.")
+        messages.success(request, f"⚙️ Mantenimiento completado: Se degradaron {resultado.modified_count} suscripciones.")
     except Exception as e:
-        messages.error(request, f"Error al ejecutar el cursor de mantenimiento: {str(e)}")
+        messages.error(request, f"Error Mantenimiento NoSQL: {str(e)}")
         
     return redirect('index')
 
@@ -1065,18 +1518,15 @@ def registrar_reproduccion(request, id_cancion):
     usuario_id = request.session.get('usuario_id')
 
     try:
-        usuario_mongo = db.usuarios.find_one({"idUsuarioSQL": usuario_id})
+        usuario_mongo = db.usuarios.find_one({"idUsuarioSQL": int(usuario_id) if str(usuario_id).isdigit() else usuario_id})
 
         if not usuario_mongo:
-            return JsonResponse({'status': 'error', 'message': 'Usuario no encontrado en MongoDB.'}, status=404)
-
+            return JsonResponse({'status': 'error', 'message': 'Usuario no encontrado.'}, status=404)
+            
         if usuario_mongo.get('estado') != 'Activo':
-            return JsonResponse({'status': 'error', 'message': 'Cuenta no activa.'}, status=403)
+            return JsonResponse({'status': 'error', 'message': 'Cuenta inactiva.'}, status=403)
 
-        # =========================
-        # REGISTRAR REPRODUCCIÓN
-        # =========================
-        db.reproducciones.insert_one({
+        nueva_reproduccion = {
             "idUsuarioSQL": usuario_id,
             "idCancionSQL": int(id_cancion),
             "fechaHora": datetime.now(),
@@ -1118,89 +1568,89 @@ def registrar_reproduccion(request, id_cancion):
             "artista": row[3]
         })
 
+        db.reproducciones.insert_one(nueva_reproduccion)
+        return JsonResponse({'status': 'success', 'message': 'Reproducción registrada.'})
+        
     except Exception as e:
-        return JsonResponse({
-            'status': 'error',
-            'message': f'Fallo de BD NoSQL: {str(e)}'
-        }, status=500)
+        return JsonResponse({'status': 'error', 'message': f'Fallo BD: {str(e)}'}, status=500)
         
 @verificar_rol(['Artista', 'Admin'])
 def crear_album_artista(request):
-    if request.method == 'POST':
-        titulo = request.POST.get('titulo', '').strip()
-        fecha_lanzamiento = request.POST.get('fecha_lanzamiento', '').strip()
-        usuario_id = request.session['usuario_id']
-        
-        with connection.cursor() as cursor:
-            try:
-                # Resolver columnas dinámicamente para el insert
-                cursor.execute("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'Catalogo' AND TABLE_NAME = 'Artista'")
-                art_cols = [row[0] for row in cursor.fetchall()]
-                col_art_usuario = 'Usuario_idUsuario' if 'Usuario_idUsuario' in art_cols else ('idUsuario' if 'idUsuario' in art_cols else ('Usuario_id' if 'Usuario_id' in art_cols else 'idArtista'))
-                
-                cursor.execute("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'Catalogo' AND TABLE_NAME = 'Album'")
-                alb_cols = [row[0] for row in cursor.fetchall()]
-                col_alb_artista = 'Artista_idArtista' if 'Artista_idArtista' in alb_cols else ('idArtista' if 'idArtista' in alb_cols else 'Artista_id')
+    artista = _obtener_artista_de_sesion(request)
 
-                cursor.execute(f"SELECT idArtista FROM Catalogo.Artista WHERE {col_art_usuario} = %s", [usuario_id])
-                artista_row = cursor.fetchone()
-                
-                if artista_row:
-                    id_artista = artista_row[0]
-                    cursor.execute(f"""
-                        INSERT INTO Catalogo.Album (titulo, fechaLanzamiento, imagen, {col_alb_artista})
-                        VALUES (%s, %s, 'album_default.png', %s)
-                    """, [titulo, fecha_lanzamiento, id_artista])
-                    messages.success(request, f"💿 El álbum '{titulo}' ha sido creado correctamente.")
-            except Exception as e:
-                messages.error(request, f"Error al crear álbum: {str(e)}")
-                
+    if not artista:
+        messages.error(request, "Tu cuenta de artista no tiene un perfil vinculado. Contacta a un administrador.")
+        return redirect('dashboard_artista')
+
+    artista_id = artista.get('idArtistaSQL') or str(artista['_id'])
+
+    if request.method == 'POST':
+        titulo = request.POST.get('titulo')
+        fecha_lanzamiento = request.POST.get('fecha_lanzamiento')
+        imagen = request.FILES.get('imagen')
+
+        imagen_nombre = "default_album.jpg"
+        if imagen:
+            fs = FileSystemStorage(location='media/albumes/')
+            filename = fs.save(imagen.name, imagen)
+            imagen_nombre = filename
+
+        nuevo_album = {
+            "titulo": titulo,
+            "fechaLanzamiento": fecha_lanzamiento,
+            "imagen": imagen_nombre,
+            "idArtista": str(artista_id)
+        }
+
+        try:
+            db.albumes.insert_one(nuevo_album)
+            messages.success(request, "Álbum añadido.")
+            return redirect('dashboard_artista')
+        except Exception as e:
+            messages.error(request, f"Error al registrar álbum: {e}")
+
     return redirect('dashboard_artista')
 
 
 @verificar_rol(['Artista', 'Admin'])
 def subir_cancion_artista(request):
+    artista = _obtener_artista_de_sesion(request)
+
+    if not artista:
+        messages.error(request, "Tu cuenta de artista no tiene un perfil vinculado. Contacta a un administrador.")
+        return redirect('dashboard_artista')
+
+    artista_id = artista.get('idArtistaSQL') or str(artista['_id'])
+
     if request.method == 'POST':
-        titulo = request.POST.get('titulo', '').strip()
-        duracion = request.POST.get('duracion', '').strip()
-        calidad = request.POST.get('calidadAudio', 'Alta')
+        titulo = request.POST.get('titulo')
+        duracion = request.POST.get('duracion')
+        calidad = request.POST.get('calidadAudio', 'Estándar')
         album_id = request.POST.get('album_id')
-        
-        with connection.cursor() as cursor:
-            try:
-                # 1. Resolver columna de relación en Canción de forma dinámica
-                cursor.execute("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'Catalogo' AND TABLE_NAME = 'Cancion'")
-                can_cols = [row[0] for row in cursor.fetchall()]
-                col_can_album = 'Album_idAlbum' if 'Album_idAlbum' in can_cols else ('idAlbum' if 'idAlbum' in can_cols else 'Album_id')
 
-                # 2. CALCULAR NÚMERO DE PISTA AUTOMÁTICAMENTE
-                cursor.execute(f"SELECT COUNT(*) FROM Catalogo.Cancion WHERE {col_can_album} = %s", [album_id])
-                count_row = cursor.fetchone()
-                numero_pista = (count_row[0] + 1) if count_row else 1
+        try:
+            num_pista = db.canciones.count_documents({
+                "$or": [{"idAlbum": album_id}, {"idAlbum": str(album_id)}]
+            }) + 1
 
-                # 3. HEREDAR LA FECHA DE LANZAMIENTO DEL ÁLBUM
-                cursor.execute("SELECT fechaLanzamiento FROM Catalogo.Album WHERE idAlbum = %s", [album_id])
-                album_row = cursor.fetchone()
-                
-                # 4. INSERT FINAL CORREGIDO: Se añade 'imagen', 'numeroPista' y 'fechaLanzamiento'
-                if album_row and album_row[0]:
-                    fecha_lanzamiento = album_row[0]
-                    cursor.execute(f"""
-                        INSERT INTO Catalogo.Cancion (titulo, duracion, calidadAudio, imagen, numeroPista, fechaLanzamiento, {col_can_album})
-                        VALUES (%s, %s, %s, 'track_default.png', %s, %s, %s)
-                    """, [titulo, duracion, calidad, numero_pista, fecha_lanzamiento, album_id])
-                else:
-                    # Plan B: Si el álbum no tiene fecha por algún motivo, usamos la fecha de hoy mediante SQL
-                    cursor.execute(f"""
-                        INSERT INTO Catalogo.Cancion (titulo, duracion, calidadAudio, imagen, numeroPista, fechaLanzamiento, {col_can_album})
-                        VALUES (%s, %s, %s, 'track_default.png', %s, GETDATE(), %s)
-                    """, [titulo, duracion, calidad, numero_pista, album_id])
-                
-                messages.success(request, f"🎵 La canción '{titulo}' se ha subido como la pista N° {numero_pista} del álbum.")
-            except Exception as e:
-                messages.error(request, f"Error al subir canción: {str(e)}")
-                
+            nueva_cancion = {
+                "titulo": titulo,
+                "duracionSegundos": int(duracion) if duracion and duracion.isdigit() else 0,
+                "calidadAudio": calidad,
+                "numeroPista": num_pista,
+                "idArtista": str(artista_id),
+                "idAlbum": str(album_id)
+            }
+
+            db.canciones.insert_one(nueva_cancion)
+            messages.success(request, "Pista subida exitosamente.")
+            return redirect('dashboard_artista')
+
+        except Exception as e:
+            messages.error(request, f"Error al subir canción: {e}")
+
     return redirect('dashboard_artista')
+
 
 # ==========================================
 # CRUD MONGODB: PLAYLISTS (MÓDULO COMPLETO)
@@ -1213,24 +1663,23 @@ def crear_playlist_usuario(request):
         usuario_id = request.session.get('usuario_id')
         
         if not nombre or len(nombre) < 3:
-            messages.error(request, "Error: El nombre de la playlist debe tener al menos 3 caracteres.")
+            messages.error(request, "Nombre inválido.")
             return redirect('dashboard_usuario')
             
         try:
-            from datetime import datetime
             nueva_playlist = {
-                "idUsuarioSQL": usuario_id,
+                "idUsuarioSQL": int(usuario_id) if str(usuario_id).isdigit() else usuario_id,
                 "nombre": nombre,
-                "descripcion": "Playlist creada desde la nueva arquitectura NoSQL",
+                "descripcion": "Playlist generada",
                 "colaborativa": False,
                 "fechaCreacion": datetime.now(),
                 "canciones": [] 
             }
             
             db.playlists.insert_one(nueva_playlist)
-            messages.success(request, f"Playlist '{nombre}' creada exitosamente en MongoDB 🍃")
+            messages.success(request, f"Playlist creada en MongoDB 🍃")
         except Exception as e:
-            messages.error(request, f"Error de validación en MongoDB: {str(e)}")
+            messages.error(request, f"Error: {str(e)}")
             
     return redirect('dashboard_usuario')
 
@@ -1238,29 +1687,26 @@ def crear_playlist_usuario(request):
 @verificar_rol(['Cliente', 'Admin'])
 def obtener_detalles_playlist(request, id_playlist):
     try:
-        # 1. Buscamos la playlist en MongoDB usando el ID alfanumérico
         playlist_mongo = db.playlists.find_one({"_id": ObjectId(id_playlist)})
         if not playlist_mongo:
-            return JsonResponse({'status': 'error', 'message': 'Playlist no encontrada en Mongo.'}, status=404)
+            return JsonResponse({'status': 'error', 'message': 'No encontrada.'}, status=404)
         
-        # 2. Extraemos los IDs de las canciones guardadas en el arreglo de Mongo
         canciones_array = playlist_mongo.get('canciones', [])
         ids_guardadas = [c.get('idCancionSQL') for c in canciones_array]
         
         canciones_guardadas = []
         todas_canciones = []
         
-        # 3. Buscamos los títulos de las canciones en el catálogo global de SQL
-        with connection.cursor() as cursor:
-            # Obtener todo el catálogo disponible
-            cursor.execute("SELECT idCancion, titulo FROM Catalogo.Cancion")
-            todas_canciones = [{'id': r[0], 'titulo': r[1]} for r in cursor.fetchall()]
+        catalogo = list(db.canciones.find({}, {"_id": 1, "idCancionSQL": 1, "titulo": 1}))
+        
+        for pista in catalogo:
+            pista_id = pista.get('idCancionSQL') or str(pista['_id'])
+            pista_dict = {'id': pista_id, 'titulo': pista.get('titulo', 'Sin título')}
             
-            # Obtener los títulos solo de las canciones que están en la playlist
-            if ids_guardadas:
-                format_strings = ','.join(['%s'] * len(ids_guardadas))
-                cursor.execute(f"SELECT idCancion, titulo FROM Catalogo.Cancion WHERE idCancion IN ({format_strings})", tuple(ids_guardadas))
-                canciones_guardadas = [{'id': r[0], 'titulo': r[1]} for r in cursor.fetchall()]
+            todas_canciones.append(pista_dict)
+            
+            if pista_id in ids_guardadas or (isinstance(pista_id, int) and pista_id in ids_guardadas):
+                canciones_guardadas.append(pista_dict)
 
         return JsonResponse({
             'status': 'success', 
@@ -1271,17 +1717,13 @@ def obtener_detalles_playlist(request, id_playlist):
     except Exception as e:
         return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
 
-
 @verificar_rol(['Cliente', 'Admin'])
 def agregar_cancion_playlist(request, id_playlist, id_cancion):
     try:
-        from datetime import datetime
-        # Validación: Evitar duplicados
         playlist_actual = db.playlists.find_one({"_id": ObjectId(id_playlist)})
         if any(c.get("idCancionSQL") == int(id_cancion) for c in playlist_actual.get("canciones", [])):
-            return JsonResponse({'status': 'error', 'message': 'Esta canción ya existe en la playlist.'}, status=400)
+            return JsonResponse({'status': 'error', 'message': 'Ya existe en playlist.'}, status=400)
 
-        # Operación UPDATE ($push a un arreglo en MongoDB)
         db.playlists.update_one(
             {"_id": ObjectId(id_playlist)},
             {"$push": {
@@ -1291,7 +1733,7 @@ def agregar_cancion_playlist(request, id_playlist, id_cancion):
                 }
             }}
         )
-        return JsonResponse({'status': 'success', 'message': 'Pista agregada en MongoDB.'})
+        return JsonResponse({'status': 'success', 'message': 'Agregada.'})
     except Exception as e:
         return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
 
@@ -1300,13 +1742,7 @@ def agregar_cancion_playlist(request, id_playlist, id_cancion):
 def eliminar_playlist_mongo(request, id_playlist):
     try:
         db.playlists.delete_one({"_id": ObjectId(id_playlist)})
-        messages.success(request, "Playlist eliminada permanentemente de MongoDB.")
+        messages.success(request, "Playlist eliminada de MongoDB.")
     except Exception as e:
-        messages.error(request, f"Error al eliminar en MongoDB: {str(e)}")
+        messages.error(request, f"Error BD: {str(e)}")
     return redirect('dashboard_usuario')
-
-def logout_view(request):
-    # Limpiamos por completo la sesión del navegador
-    request.session.flush()
-    messages.success(request, "Sesión cerrada correctamente.")
-    return redirect('login')

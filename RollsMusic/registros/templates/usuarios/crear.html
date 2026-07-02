@@ -78,13 +78,12 @@
                     </div>
                     <div class="col-md-6">
                         <label for="rol" class="form-label">Rol del Usuario</label>
-                        <select name="rol" id="rol" class="form-select">
-                            {% for rol in roles %}
-                            <option value="{{ rol.idRol }}" {% if rol.idRol == 2 %}selected{% endif %}>
-                                {{ rol.nombre }}
-                            </option>
-                            {% endfor %}
-                        </select>
+                            <select name="rol" class="form-control" required>
+                                <option value="" disabled selected>Selecciona un rol...</option>
+                                <option value="Cliente">Cliente</option>
+                                <option value="Artista">Artista</option>
+                                <option value="Administrador">Administrador</option>
+                            </select>
                     </div>
                 </div>
 

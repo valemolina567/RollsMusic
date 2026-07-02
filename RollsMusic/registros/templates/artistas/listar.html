@@ -82,54 +82,59 @@
                             <th class="text-center pe-4">Acciones</th>
                         </tr>
                     </thead>
-                    <tbody>
-                        {% for item in items %}
-                        <tr>
-                            <td class="ps-4 fw-bold text-muted">{{ item.idArtista }}</td>
-                            
-                            <td>
-                                {% if item.imagen %}
-                                    <img src="{% static 'images/' %}{{ item.imagen }}" alt="Avatar de {{ item.nombreArtistico }}" class="artist-avatar">
-                                {% else %}
-                                    <img src="{% static 'images/default_artist.png' %}" alt="Por defecto" class="artist-avatar">
-                                {% endif %}
-                            </td>
+                        <tbody>
+                            {% for item in items %}
+                            <tr>
+                                <td class="ps-4 fw-bold text-muted">{{ item.idArtista }}</td>
+                                
+                                <td>
+                                    {% if item.imagen_limpia %}
+                                        <img src="{% static 'images/' %}{{ item.imagen_limpia }}" alt="Foto de {{ item.nombreArtistico }}" class="artist-avatar">
+                                    {% else %}
+                                        <img src="{% static 'images/default_artist.png' %}" alt="Por defecto" class="artist-avatar">
+                                    {% endif %}
+                                </td>
 
-                            <td class="fw-bold text-white">
-                                {{ item.nombreArtistico }}
-                                {% if item.verificado_db %}
-                                    <i class="bi bi-patch-check-fill text-info ms-1" title="Verificado"></i>
-                                {% endif %}
-                            </td>
-                            <td><span class="badge bg-secondary text-dark fw-bold">{{ item.genero_db|default:"No Asignado" }}</span></td>
-                            <td class="text-center">
-                                {% if item.verificado_db %}
-                                    <span class="badge bg-success-subtle text-success border border-success px-2.5">Sí</span>
-                                {% else %}
-                                    <span class="badge bg-danger-subtle text-danger border border-danger px-2.5">No</span>
-                                {% endif %}
-                            </td>
-                            <td><span class="badge bg-dark border border-secondary">{{ item.Discografica_idDiscografica.nombre|default:"Independiente" }}</span></td>
-                            <td class="text-center pe-4">
-                                <div class="d-inline-flex gap-2">
-                                    <a href="{% url 'editar_artista' item.idArtista %}" class="btn btn-outline-info btn-sm">
-                                        <i class="bi bi-pencil-square"></i> Editar
-                                    </a>
-                                    <form action="{% url 'eliminar_artista' item.idArtista %}" method="POST" onsubmit="return confirm('¿Seguro que deseas eliminar este artista?');">
-                                        {% csrf_token %}
-                                        <button type="submit" class="btn btn-outline-danger btn-sm">
-                                            <i class="bi bi-trash3-fill"></i> Eliminar
-                                        </button>
-                                    </form>
-                                </div>
-                            </td>
-                        </tr>
-                        {% empty %}
-                        <tr>
-                            <td colspan="7" class="text-center py-4 text-muted">No hay artistas registrados en la plataforma.</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
+                                <td class="fw-bold text-white">
+                                    {{ item.nombreArtistico }}
+                                    {% if item.verificado_db %}
+                                        <i class="bi bi-patch-check-fill text-info ms-1" title="Verificado"></i>
+                                    {% endif %}
+                                </td>
+                                
+                                <td><span class="badge bg-secondary text-dark fw-bold">{{ item.genero_db|default:"No Asignado" }}</span></td>
+                                
+                                <td class="text-center">
+                                    {% if item.verificado_db %}
+                                        <span class="badge bg-success-subtle text-success border border-success px-2.5">Sí</span>
+                                    {% else %}
+                                        <span class="badge bg-danger-subtle text-danger border border-danger px-2.5">No</span>
+                                    {% endif %}
+                                </td>
+                                
+                                <td><span class="badge bg-dark border border-secondary">{{ item.discografica_nombre }}</span></td>
+                                
+                                <td class="text-center pe-4">
+                                    <div class="d-inline-flex gap-2">
+                                        <a href="{% url 'editar_artista' item.id_mongo %}" class="btn btn-outline-info btn-sm">
+                                            <i class="bi bi-pencil-square"></i> Editar
+                                        </a>
+                                        
+                                        <form action="{% url 'eliminar_artista' item.id_mongo %}" method="POST" onsubmit="return confirm('¿Seguro que deseas eliminar este artista?');">
+                                            {% csrf_token %}
+                                            <button type="submit" class="btn btn-danger btn-sm" data-nombre="{{ item.nombreArtistico }}">
+                                                <i class="bi bi-trash-fill"></i> Eliminar
+                                            </button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="7" class="text-center py-4 text-muted">No hay artistas registrados en la plataforma.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
                 </table>
             </div>
         </div>

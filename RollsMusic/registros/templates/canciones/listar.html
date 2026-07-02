@@ -142,28 +142,27 @@
             <table class="table table-dark table-striped table-hover table-rm mb-0">
 
                 <thead>
-                <tr>
-                    <th class="ps-4">Imagen</th>
-                    <th>ID</th>
-                    <th>Título</th>
-                    <th>Duración</th>
-                    <th class="text-center">Pista #</th>
-                    <th>Álbum</th>
-                    <th>Calidad</th>
-                    <th class="text-center pe-4">Acciones</th>
-                </tr>
+                    <tr>
+                        <th class="ps-4">Portada</th>
+                        <th>ID</th>
+                        <th>Canción y Artista</th>
+                        <th>Duración</th>
+                        <th class="text-center">Pista</th>
+                        <th>Álbum</th>
+                        <th>Géneros</th> <th>Calidad</th>
+                        <th class="text-center pe-4">Acciones</th>
+                    </tr>
                 </thead>
 
                 <tbody>
                 {% for item in items %}
                     <tr>
 
-                        <!-- IMAGEN -->
                         <td class="ps-4">
-                            {% if item.imagen %}
-                                <img src="{{ item.imagen.url }}" class="song-img">
+                            {% if item.imagen_url %}
+                                <img src="{{ item.imagen_url }}" class="song-img" style="width: 45px; height: 45px; object-fit: cover; border-radius: 4px;" loading="lazy">
                             {% else %}
-                                <img src="{% static 'images/default_track.png' %}" class="song-img">
+                                <img src="{% static 'images/default_track.png' %}" class="song-img" style="width: 45px; height: 45px; object-fit: cover; border-radius: 4px;" loading="lazy">
                             {% endif %}
                         </td>
 
@@ -172,18 +171,27 @@
                         <td class="fw-bold text-white">
                             <i class="bi bi-play-circle-fill text-info me-2"></i>
                             {{ item.titulo }}
+                            <div class="text-muted fw-normal mt-1" style="font-size: 0.85em; margin-left: 28px;">
+                                {{ item.artista_nombre }}
+                            </div>
                         </td>
 
-                        <td>{{ item.duracion }} seg</td>
+                        <td>{{ item.duracion_formateada }}</td>
 
                         <td class="text-center">
                             <span class="badge bg-dark border border-secondary">
-                                {{ item.numeroPista }}
+                                #{{ item.numeroPista }}
                             </span>
                         </td>
 
                         <td class="text-info fw-semibold">
-                            {{ item.Album_idAlbum.titulo }}
+                            {{ item.album_titulo }}
+                        </td>
+                        
+                        <td>
+                            <span class="badge bg-secondary text-dark fw-bold">
+                                {{ item.generos_texto }}
+                            </span>
                         </td>
 
                         <td>
@@ -201,14 +209,14 @@
                         <td class="text-center pe-4">
                             <div class="d-inline-flex gap-2">
 
-                                <a href="{% url 'editar_cancion' item.idCancion %}"
+                                <a href="{% url 'editar_cancion' item.id_mongo %}"
                                    class="btn btn-outline-info btn-sm">
                                     <i class="bi bi-pencil-square"></i>
                                 </a>
 
-                                <form action="{% url 'eliminar_cancion' item.idCancion %}"
+                                <form action="{% url 'eliminar_cancion' item.id_mongo %}"
                                       method="POST"
-                                      onsubmit="return confirm('¿Seguro que deseas borrar esta canción?');">
+                                      onsubmit="return confirm('¿Seguro que deseas borrar permanentemente esta canción?');">
                                     {% csrf_token %}
                                     <button type="submit" class="btn btn-outline-danger btn-sm">
                                         <i class="bi bi-trash3-fill"></i>
@@ -221,7 +229,7 @@
                     </tr>
                 {% empty %}
                     <tr>
-                        <td colspan="8" class="text-center py-4 text-muted">
+                        <td colspan="9" class="text-center py-4 text-muted">
                             No hay canciones registradas en la plataforma.
                         </td>
                     </tr>

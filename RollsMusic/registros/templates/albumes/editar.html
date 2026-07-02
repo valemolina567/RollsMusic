@@ -146,41 +146,27 @@
                     required>
             </div>
 
-            <div class="mb-3">
-                <label class="form-label">
-                    Fecha de Lanzamiento
-                </label>
+                <div class="mb-3">
+                    <label for="fechaLanzamiento" class="form-label">Fecha de Lanzamiento</label>
+                    <input type="date" 
+                        name="fechaLanzamiento" 
+                        id="fechaLanzamiento" 
+                        class="form-control" 
+                        value="{{ item.fecha_formateada }}" required>
+                </div>
 
-                <input
-                    type="date"
-                    class="form-control"
-                    name="fechaLanzamiento"
-                    value="{{ item.fechaLanzamiento|date:'Y-m-d' }}"
-                    required>
-            </div>
-
-            <div class="mb-3">
-                <label class="form-label">
-                    Artista / Banda
-                </label>
-
-                <select
-                    name="artista"
-                    class="form-select"
-                    required>
-
-                    {% for a in artistas %}
-                        <option
-                            value="{{ a.idArtista }}"
-                            {% if a.idArtista == item.Artista_idArtista.idArtista %}selected{% endif %}>
-
-                            {{ a.nombreArtistico }}
-
-                        </option>
-                    {% endfor %}
-
-                </select>
-            </div>
+                    <div class="mb-3">
+                        <label for="artista" class="form-label">Artista</label>
+                        <select name="artista" id="artista" class="form-select" required>
+                            <option value="">-- Seleccione un Artista --</option>
+                            {% for artista in artistas %}
+                                <option value="{{ artista.idArtista }}" 
+                                    {% if artista.idArtista|slugify == item.idArtista_actual|slugify %} selected {% endif %}>
+                                    {{ artista.nombreArtistico }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
 
             <div class="mb-3">
 
