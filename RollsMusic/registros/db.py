@@ -2,7 +2,7 @@ import os
 from pymongo import MongoClient
 from dotenv import load_dotenv
 
-# 🔥 SUBIR DOS NIVELES HASTA EL ROOT DEL PROYECTO
+# SUBIR DOS NIVELES HASTA EL ROOT DEL PROYECTO
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 PROJECT_ROOT = os.path.abspath(

@@ -1091,8 +1091,9 @@ def dashboard_usuario(request):
     usuario_id = request.session.get('usuario_id')
     if not usuario_id:
         return redirect('login')
-        
-    top_canciones, playlists_usuario = [], []
+
+    top_canciones = []
+    playlists_usuario = []
     auto_open_id = request.session.pop('auto_open_playlist_id', None)
     
     # 1. Búsqueda robusta del usuario actual
@@ -1212,6 +1213,9 @@ def dashboard_usuario(request):
         except Exception:
             pass
 
+    # ========================================================
+    # CONTEXT
+    # ========================================================
     context = {
         'top_canciones': top_canciones,
         'recomendaciones': recomendaciones,
