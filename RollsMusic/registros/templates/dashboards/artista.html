@@ -33,11 +33,23 @@
         .rm-input:focus { background-color: transparent; border-color: var(--rm-accent); color: var(--rm-text-primary); box-shadow: none; }
         .help-text { color: var(--rm-text-secondary); font-size: 0.85rem; margin-top: 4px; }
         select.rm-input, select.rm-input option { background-color: #252525 !important; color: #FFFFFF !important; }
+        
+        /* Estilo para la foto del artista */
+        .artist-profile-img {
+            width: 80px; 
+            height: 80px; 
+            object-fit: cover; 
+            border-radius: 50%; 
+            border: 2px solid var(--rm-accent);
+        }
     </style>
 </head>
 <body>
-        <nav class="navbar navbar-rm d-flex justify-content-between align-items-center mb-4">
-        <a href="#" style="text-decoration: none !important;"><img src="{% static 'images/Logo.png' %}" alt="Icono RollsMusic" class="logo-img-nav"> <span class="fs-4 fw-bold text-white ms-2">RollsMusic</span></a>
+    <nav class="navbar navbar-rm d-flex justify-content-between align-items-center mb-4">
+        <a href="#" style="text-decoration: none !important;">
+            <img src="{% static 'images/Logo.png' %}" alt="Icono RollsMusic" class="logo-img-nav"> 
+            <span class="fs-4 fw-bold text-white ms-2">RollsMusic</span>
+        </a>
         <div class="d-flex align-items-center gap-3">
             <span class="btn btn-sm btn-outline-info rounded-pill px-3 fs-6 fw-bold">Panel de Artista</span>
             <a class="btn btn-outline-light btn-sm rounded-pill px-3" href="{% url 'logout' %}">Cerrar Sesión</a>
@@ -56,10 +68,14 @@
         {% if artista %}
         <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-5 p-4 border border-secondary rounded gap-3" style="background-color: var(--rm-surface);">
             <div class="d-flex align-items-center">
-                <div class="rounded-circle me-4 d-flex align-items-center justify-content-center" style="width: 80px; height: 80px; background-color: #333; border: 2px solid var(--rm-accent); font-size: 2.5rem;">🎤</div>
+                <img src="{{ artista.imagen_url }}" alt="Foto de {{ artista.nombreArtistico }}" class="artist-profile-img me-4 shadow">
+                
                 <div>
-                    <span class="badge bg-info text-dark mb-1"><i class="bi bi-patch-check-fill me-1"></i>Perfil Verificado</span>
+                    {% if artista.verificado %}
+                        <span class="badge bg-info text-dark mb-1"><i class="bi bi-patch-check-fill me-1"></i>Perfil Verificado</span>
+                    {% endif %}
                     <h1 class="h2 fw-bold mb-0">{{ artista.nombreArtistico }}</h1>
+                    <div class="text-muted small mt-1"><i class="bi bi-geo-alt-fill"></i> {{ artista.pais }} • {{ artista.genero }}</div>
                 </div>
             </div>
             <div class="d-flex gap-2">
@@ -74,7 +90,7 @@
 
         <div class="row mb-5">
             <div class="col-md-6 mb-3">
-                <div class="stat-card d-flex justify-content-between align-items-start">
+                <div class="stat-card d-flex justify-content-between align-items-start shadow-sm">
                     <div>
                         <div class="stat-title">Ingresos Totales (Regalías)</div>
                         <div class="stat-value text-success">${{ total_regalias }}</div>
@@ -83,40 +99,44 @@
                 </div>
             </div>
             <div class="col-md-6 mb-3">
-                <div class="stat-card d-flex justify-content-between align-items-start">
+                <div class="stat-card d-flex justify-content-between align-items-start shadow-sm">
                     <div>
                         <div class="stat-title">Minutos en pista TOP</div>
-                        <div class="stat-value">{{ minutos_cancion_demo }}<span class="fs-4 text-muted"> min</span></div>
+                        <div class="stat-value">{{ total_reproducciones }}<span class="fs-4 text-muted"> min</span></div>
                     </div>
-                    <i class="bi bi-clock-history stat-icon"></i>
+                    <i class="bi bi-clock-history stat-icon text-info"></i>
                 </div>
             </div>
         </div>
 
-        <h3 class="fw-bold mb-3">Tu Catálogo de Canciones</h3>
+        <h3 class="fw-bold mb-3"><i class="bi bi-music-note-list text-info me-2"></i> Tus Canciones Recientes</h3>
         <div class="table-responsive">
-            <table class="table-rm">
+            <table class="table-rm shadow-sm">
                 <thead>
                     <tr>
                         <th>#</th>
                         <th>Título de la Canción</th>
-                        <th>Álbum</th>
                         <th>Duración</th>
                         <th>Calidad</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {% for cancion in canciones_artista %}
+                    {% for cancion in canciones_recientes %}
                     <tr>
                         <td class="text-muted fw-bold">{{ forloop.counter }}</td>
-                        <td class="fw-bold text-white">{{ cancion.titulo }}</td>
-                        <td class="text-muted fw-bold">{{ cancion.Album_idAlbum.titulo }}</td>
-                        <td class="text-muted fw-bold">{{ cancion.duracion }} min/seg</td>
-                        <td><span class="badge bg-dark border text-info">{{ cancion.calidadAudio }}</span></td>
+                        <td class="fw-bold text-white"><i class="bi bi-play-fill text-info me-1"></i> {{ cancion.titulo }}</td>
+                        <td class="text-muted fw-bold">{{ cancion.duracion_formateada }} min</td>
+                        <td>
+                            {% if cancion.calidadAudio == 'Alta' %}
+                                <span class="badge bg-info text-dark fw-bold border">{{ cancion.calidadAudio }}</span>
+                            {% else %}
+                                <span class="badge bg-dark border text-muted">{{ cancion.calidadAudio }}</span>
+                            {% endif %}
+                        </td>
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="5" class="text-center py-4 text-muted">No tienes canciones registradas. Utiliza el botón superior para subir una.</td>
+                        <td colspan="4" class="text-center py-4 text-muted">No tienes canciones registradas. Utiliza el botón superior para subir una.</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -134,14 +154,8 @@
             </div>
             
             <hr class="border-secondary">
-            
-            <h6 class="fw-bold text-info mb-2"><i class="bi bi-database-fill-gear me-2"></i>Columnas físicas reales encontradas en la tabla <code>Catalogo.Artista</code>:</h6>
-            <div class="bg-black p-3 rounded font-monospace text-success small mb-3 border border-secondary">
-                [ {% for col in columnas_encontradas %}"{{ col }}"{% if not forloop.last %}, {% endif %}{% empty %}No se recuperaron columnas. Revisa el estado de SQL Server.{% endfor %} ]
-            </div>
-
             <p class="small text-white-50">
-                 Si en el recuadro verde de arriba <strong>NO ves</strong> la columna <code>Usuario_idUsuario</code> (o similar), significa que la tabla física en SQL Server no tiene el campo para enlazar la cuenta del usuario. Recuerda ejecutar el script <code>ALTER TABLE</code> en SQL Server Management Studio para crear la columna y luego registrar el perfil desde el admin.
+                 Contacta al administrador del sistema para que asigne tu usuario al registro del artista correspondiente en el catálogo.
             </p>
         </div>
         {% endif %}
@@ -190,7 +204,7 @@
                             <select class="form-select rm-input" id="album_id" name="album_id" required style="color-scheme: dark;">
                                 <option value="" disabled selected>-- Elige un álbum de tu lista --</option>
                                 {% for alb in albums_artista %}
-                                    <option value="{{ alb.0 }}">{{ alb.1 }}</option>
+                                    <option value="{{ alb.id_mongo }}">{{ alb.titulo }}</option>
                                 {% endfor %}
                             </select>
                             <div class="help-text">Si tu álbum no aparece, primero debes crearlo usando el botón de "Crear Álbum".</div>
