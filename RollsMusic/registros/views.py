@@ -281,9 +281,8 @@ def eliminar_discografica(request, id):
         
     return redirect('listar_discograficas')
 
-
 # ==========================================
-# CRUD: ARTISTAS (100% MONGODB)
+# CRUD: ARTISTAS - MONGODB)
 # ==========================================
 @verificar_rol(['Admin'])
 def listar_artistas(request):
@@ -292,6 +291,11 @@ def listar_artistas(request):
         
     items_mongo = list(db.artistas.find(filtro))
     
+    # ==========================================
+    # OPTIMIZACIÓN: COLA DE CONSULTAS EN MEMORIA
+    # Traemos las colecciones maestras una sola vez
+    # ==========================================
+
     dict_discos = {}
     for d in db.discograficas.find():
         if d.get('idDiscograficaSQL') is not None: 
@@ -303,18 +307,21 @@ def listar_artistas(request):
         if g.get('idGeneroSQL') is not None: 
             dict_generos[str(g['idGeneroSQL'])] = g
         dict_generos[str(g['_id'])] = g
+
+    # ==========================================
     
     for item in items_mongo:
         item['id_mongo'] = str(item['_id'])
         item['idArtista'] = item.get('idArtistaSQL') or str(item['_id'])[-6:].upper()
         item['nombreArtistico'] = item.get('nombreArtistico') or item.get('nombre') or 'Desconocido'
         
+
+        # Normalización de rutas de imágenes
         img_raw = item.get('imagen', 'default_artist.png')
         if img_raw and not img_raw.startswith('artistas/') and img_raw != 'default_artist.png':
             item['imagen_limpia'] = f"artistas/{img_raw}"
         else:
             item['imagen_limpia'] = img_raw
-
         disco_id = str(item.get('idDiscografica') or item.get('Discografica_idDiscografica') or '')
         disco_doc = dict_discos.get(disco_id)
         item['discografica_nombre'] = disco_doc.get('nombre', 'Independiente') if disco_doc else "Independiente"
@@ -322,7 +329,7 @@ def listar_artistas(request):
         genero_id = str(item.get('genero') or item.get('generoPrincipal') or item.get('idGenero') or '')
         genero_name = "N/A"
         
-        genero_raw = item.get('genero') or item.get('generoPrincipal') or item.get('idGenero')
+        # Verificación de tipo (si ya es texto plano como "Pop" o un ID relacional)
         if isinstance(genero_raw, str) and len(genero_raw) < 20 and not genero_raw.isdigit() and len(genero_id) != 24:
             genero_name = genero_raw
         elif genero_id in dict_generos:
@@ -345,6 +352,8 @@ def crear_artista(request):
         genero_form = request.POST.get('generoPrincipal')
         verificado_form = True if request.POST.get('verificado') else False 
         
+        # --- LÓGICA PARA LA IMAGEN (Se mantiene en servidor local) ---
+
         nombre_imagen = 'default_artist.png'
         if request.FILES.get('imagen'):
             imagen_archivo = request.FILES['imagen']
@@ -366,11 +375,13 @@ def crear_artista(request):
         
         try:
             db.artistas.insert_one(nuevo_artista)
-            messages.success(request, f"Perfil creado correctamente.")
+            messages.success(request, f"Perfil de '{nombre_artistico}' creado correctamente en MongoDB.")
             return redirect('listar_artistas')
         except Exception as e:
             messages.error(request, f"Error en MongoDB: {str(e)}")
 
+
+    # CARGA DE SELECTORES DESDE MONGODB PARA EVITAR ERRORES DE TABLA INEXISTENTE
     discograficas = list(db.discograficas.find({}, {"_id": 1, "nombre": 1, "idDiscograficaSQL": 1}))
     for d in discograficas: d['idDiscografica'] = d.get('idDiscograficaSQL') or str(d['_id'])
         
@@ -379,6 +390,8 @@ def crear_artista(request):
         
     generos = list(db.generos.find({}, {"_id": 1, "nombre": 1, "idGeneroSQL": 1}))
     for g in generos: g['idGenero'] = g.get('idGeneroSQL') or str(g['_id'])
+
+    # Fallback si no hay géneros en mongo aún
     if not generos: generos = [{'idGenero': 'Pop', 'nombre': 'Pop'}, {'idGenero': 'Rock', 'nombre': 'Rock'}, {'idGenero': 'Urbano', 'nombre': 'Urbano'}]
 
     return render(request, 'artistas/crear.html', {
@@ -404,6 +417,7 @@ def editar_artista(request, id):
         genero_form = request.POST.get('generoPrincipal')
         verificado_form = True if request.POST.get('verificado') else False
 
+        # --- ACTUALIZACIÓN DE IMAGEN ---
         nombre_imagen = artista_obj.get('imagen', 'default_artist.png')
         if request.FILES.get('imagen'):
             imagen_archivo = request.FILES['imagen']
@@ -423,11 +437,13 @@ def editar_artista(request, id):
                     "verificado": verificado_form
                 }
             })
-            messages.success(request, f"Perfil actualizado correctamente.")
+            
+            messages.success(request, f"Perfil de '{nombre_form}' actualizado correctamente.")
             return redirect('listar_artistas')
         except Exception as e:
             messages.error(request, f"Error al guardar en MongoDB: {str(e)}")
 
+    # Preparación de datos para el formulario de edición
     artista_obj['id_mongo'] = str(artista_obj['_id'])
     artista_usuario_id = str(artista_obj.get('idUsuario', ''))
     genero_actual = artista_obj.get('genero', '')
@@ -462,6 +478,7 @@ def eliminar_artista(request, id):
         if artista:
             id_referencia = artista.get('idArtistaSQL') or str(artista['_id'])
             
+            # 1. Validación de integridad
             albumes_vinculados = db.albumes.count_documents({
                 "$or": [
                     {"idArtista": id_referencia},
@@ -471,29 +488,35 @@ def eliminar_artista(request, id):
             })
             
             if albumes_vinculados > 0:
-                messages.error(request, f"No se puede eliminar. El artista tiene {albumes_vinculados} álbum(es) registrado(s).")
+                messages.error(request, f"No se puede eliminar. El artista '{artista.get('nombreArtistico')}' tiene {albumes_vinculados} álbum(es) registrado(s).")
                 return redirect('listar_artistas')
 
+            # 2. Guardar la ruta de la imagen antes de eliminar el documento
             imagen_a_borrar = artista.get('imagen')
+
+            # 3. Borrado del registro en MongoDB
             db.artistas.delete_one(filtro)
             
+            # 4. Eliminación física del archivo en el sistema de archivos
             if imagen_a_borrar and imagen_a_borrar != 'default_artist.png':
+                # Construimos la ruta dinámica utilizando BASE_DIR de Django
                 ruta_completa = os.path.join(settings.BASE_DIR, 'registros', 'static', 'images', imagen_a_borrar)
+                
                 if os.path.exists(ruta_completa):
                     try:
                         os.remove(ruta_completa)
-                    except Exception:
-                        pass
+                        print(f"Archivo físico eliminado con éxito: {ruta_completa}")
+                    except Exception as err_os:
+                        print(f"No se pudo eliminar el archivo físico: {str(err_os)}")
 
-            messages.success(request, "Artista y su imagen asociada eliminados.")
+            messages.success(request, "Artista y su imagen asociada eliminados correctamente.")
         else:
-            messages.error(request, "El artista no existe.")
+            messages.error(request, "El artista no existe en la base NoSQL.")
             
     except Exception as e:
         messages.error(request, f"Fallo al eliminar: {str(e)}")
         
     return redirect('listar_artistas')
-
 
 # ==========================================
 # CRUD: ALBUMES (100% MONGODB)
@@ -505,22 +528,32 @@ def listar_albumes(request):
         
     items_mongo = list(db.albumes.find(filtro))
     
+
+    # ==========================================
+    # 🚀 OPTIMIZACIÓN: MAPA DE ARTISTAS EN RAM
+    # Evita golpear la base de datos por cada álbum
+    # ==========================================
     dict_artistas = {}
     for a in db.artistas.find():
         if a.get('idArtistaSQL') is not None: 
             dict_artistas[str(a['idArtistaSQL'])] = a
         dict_artistas[str(a['_id'])] = a
+    # ==========================================
+
     
     for item in items_mongo:
         item['id_mongo'] = str(item['_id'])
         item['idAlbum'] = item.get('idAlbumSQL') or str(item['_id'])[-6:].upper()
         
+        # Lógica de URL de imagen limpia para MEDIA_URL
         img_name = item.get('imagen')
         if img_name and img_name != 'default_album.png' and img_name != 'default_album.jpg':
             item['imagen_url'] = f"{settings.MEDIA_URL}albumes/{img_name}"
         else:
-            item['imagen_url'] = None 
+
+            item['imagen_url'] = None # Usará el fallback por defecto en el HTML
             
+        # 🛠️ Cruce en memoria O(1) del Artista Propietario
         id_art = str(item.get('idArtista') or item.get('Artista_idArtista') or '')
         artista_doc = dict_artistas.get(id_art)
         item['artista_nombre'] = artista_doc.get('nombreArtistico', 'Desconocido') if artista_doc else "Desconocido"
@@ -534,6 +567,7 @@ def crear_album(request):
         fecha = request.POST.get('fechaLanzamiento')
         artista_id = request.POST.get('artista')
         
+        # Guardar imagen física en la carpeta media/albumes/
         imagen = request.FILES.get('imagen') 
         imagen_nombre = 'default_album.png'
         if imagen:
@@ -551,6 +585,8 @@ def crear_album(request):
         messages.success(request, f"Álbum '{titulo}' creado exitosamente.")
         return redirect('listar_albumes')
 
+
+    # Cargar artistas para el select
     artistas = list(db.artistas.find({}, {"_id": 1, "nombreArtistico": 1, "idArtistaSQL": 1}))
     for a in artistas: a['idArtista'] = a.get('idArtistaSQL') or str(a['_id'])
     
@@ -574,6 +610,8 @@ def editar_album(request, id):
             filename = fs.save(nueva_imagen.name, nueva_imagen)
             imagen_nombre = filename
 
+
+        # Si el input de fecha viene vacío por alguna razón, mantenemos la que ya tenía
         fecha_lanzamiento = request.POST.get('fechaLanzamiento') or item.get('fechaLanzamiento')
 
         db.albumes.update_one(filtro, {
@@ -587,14 +625,19 @@ def editar_album(request, id):
         messages.success(request, "Álbum actualizado correctamente.")
         return redirect('listar_albumes')
 
+
+    # --- PREPARACIÓN DE DATOS PARA LA VISTA (GET) ---
     item['id_mongo'] = str(item['_id'])
     
+    # 🌟 CORRECCIÓN AQUÍ: Forzamos la conversión a String limpia de cualquier variante de ID
     artista_id_raw = item.get('idArtista') or item.get('Artista_idArtista')
     if artista_id_raw is not None:
         item['idArtista_actual'] = str(artista_id_raw).strip()
     else:
         item['idArtista_actual'] = ""
     
+
+    # Formateamos la fecha de lanzamiento de forma estricta para el HTML
     fecha_raw = item.get('fechaLanzamiento', '')
     if fecha_raw:
         if hasattr(fecha_raw, 'strftime'):
@@ -606,8 +649,10 @@ def editar_album(request, id):
     else:
         item['fecha_formateada'] = ""
 
+    # Cargar el listado de artistas para el combo box
     artistas = list(db.artistas.find({}, {"_id": 1, "nombreArtistico": 1, "idArtistaSQL": 1}))
     for a in artistas: 
+        # Aseguramos también que el ID del bucle sea estrictamente String
         artista_loop_id = a.get('idArtistaSQL') or a['_id']
         a['idArtista'] = str(artista_loop_id).strip()
 
@@ -620,28 +665,33 @@ def eliminar_album(request, id):
         album = db.albumes.find_one(filtro)
         
         if album:
+
+            # Validar si tiene canciones
             id_referencia = album.get('idAlbumSQL') or str(album['_id'])
             canciones_vinculadas = db.canciones.count_documents({
                 "$or": [{"idAlbum": id_referencia}, {"Album_idAlbum": id_referencia}, {"idAlbum": str(id_referencia)}]
             })
             
             if canciones_vinculadas > 0:
-                messages.error(request, f"No se puede eliminar. El álbum contiene canciones.")
+
+                messages.error(request, f"No se puede eliminar. El álbum contiene {canciones_vinculadas} canciones.")
                 return redirect('listar_albumes')
 
             imagen_a_borrar = album.get('imagen')
             db.albumes.delete_one(filtro)
             
+
+            # Borrado físico
             if imagen_a_borrar and imagen_a_borrar != 'default_album.png':
                 ruta_completa = os.path.join(settings.MEDIA_ROOT, 'albumes', imagen_a_borrar)
                 if os.path.exists(ruta_completa): os.remove(ruta_completa)
                     
-            messages.success(request, "Álbum eliminado.")
+
+            messages.success(request, "Álbum eliminado correctamente.")
     except Exception as e:
         messages.error(request, f"Fallo al eliminar: {str(e)}")
         
     return redirect('listar_albumes')
-
 
 # ==========================================
 # CRUD: CANCIONES (100% MONGODB)
@@ -651,8 +701,15 @@ def listar_canciones(request):
     query = request.GET.get('q', '').strip()
     filtro = {"titulo": {"$regex": query, "$options": "i"}} if query else {}
         
+
+    # 1. Traer todas las canciones de golpe
     canciones_mongo = list(db.canciones.find(filtro))
     
+    # ==========================================
+    # 🚀 OPTIMIZACIÓN: DICCIONARIOS EN MEMORIA
+    # Traemos las otras colecciones 1 sola vez y las guardamos en memoria.
+    # Soportan tanto el ID viejo de SQL como el nuevo de Mongo.
+    # ==========================================
     dict_artistas = {}
     for a in db.artistas.find():
         if a.get('idArtistaSQL') is not None: dict_artistas[str(a['idArtistaSQL'])] = a
@@ -678,21 +735,27 @@ def listar_canciones(request):
         else:
             cancion['duracion_formateada'] = "0:00"
 
+        # 2. RESOLVER ÁLBUM Y HEREDAR IMAGEN
+        # Buscamos el ID del álbum en nuestro diccionario rápido
         id_alb = str(cancion.get('idAlbum') or cancion.get('Album_idAlbum', ''))
         album_doc = dict_albumes.get(id_alb)
         
         cancion['album_titulo'] = album_doc.get('titulo') if album_doc else "Sencillo"
 
+# 🌟 EL TRUCO: Heredamos la imagen física del álbum en lugar de la canción
         if album_doc and album_doc.get('imagen') and album_doc.get('imagen') not in ['default_album.png', 'default_album.jpg', '']:
             img_name = album_doc.get('imagen')
+            # Las canciones ahora buscarán la portada del álbum en media/albumes/
             cancion['imagen_url'] = f"{settings.MEDIA_URL}albumes/{img_name}"
         else:
-            cancion['imagen_url'] = None 
+            cancion['imagen_url'] = None # Usará el track por defecto en el HTML
 
+        # 3. RESOLVER ARTISTA
         id_art = str(cancion.get('idArtista') or cancion.get('Artista_idArtista', ''))
         artista_doc = dict_artistas.get(id_art)
         cancion['artista_nombre'] = artista_doc.get('nombreArtistico') if artista_doc else "Artista Independiente"
 
+        # 4. RESOLVER GÉNEROS
         nombres_generos = []
         for gen_item in cancion.get('generos', []):
             id_sql = str(gen_item.get('idSQL', ''))
@@ -706,6 +769,9 @@ def listar_canciones(request):
 
     return render(request, 'canciones/listar.html', {'items': canciones_mongo})
 
+# ------------------------------------------
+# CREAR CANCION (CON IMAGEN)
+# ------------------------------------------
 @verificar_rol(['Admin'])
 def crear_cancion(request):
     if request.method == 'POST':
@@ -827,6 +893,8 @@ def crear_genero(request):
     if request.method == 'POST':
         nombre = request.POST.get('nombre', '').strip()
         if nombre:
+
+            # Validar que no haya duplicados (ignorando mayúsculas/minúsculas)
             if db.generos.find_one({"nombre": {"$regex": f"^{nombre}$", "$options": "i"}}):
                 messages.error(request, f"El género '{nombre}' ya existe en el catálogo.")
             else:
@@ -859,11 +927,13 @@ def eliminar_genero(request, id):
         genero = db.generos.find_one(filtro)
         
         if genero:
+
+            # Validar integridad: ¿Hay artistas usando este género?
             nombre_gen = genero.get('nombre')
             usos_artistas = db.artistas.count_documents({"genero": nombre_gen})
             
             if usos_artistas > 0:
-                messages.error(request, f"No se puede eliminar. Hay {usos_artistas} artista(s) usando el género.")
+                messages.error(request, f"No se puede eliminar. Hay {usos_artistas} artista(s) usando el género '{nombre_gen}'.")
             else:
                 db.generos.delete_one(filtro)
                 messages.success(request, "Género eliminado correctamente.")
@@ -874,7 +944,6 @@ def eliminar_genero(request, id):
         messages.error(request, f"Error al eliminar en MongoDB: {str(e)}")
         
     return redirect('listar_generos')
-
 
 # ==========================================
 # CRUD: PLANES (100% MONGODB)
@@ -889,6 +958,8 @@ def listar_planes(request):
     for item in items_mongo:
         item['id_mongo'] = str(item['_id'])
         item['idPlan'] = item.get('idPlanSQL') or str(item['_id'])[-6:].upper()
+
+        # Asegurar valores numéricos para visualización
         item['precio'] = float(item.get('precio', 0.0))
         item['duracionMeses'] = int(item.get('duracionMeses', 0))
         
@@ -911,11 +982,12 @@ def crear_plan(request):
                         "precio": float(precio),
                         "duracionMeses": int(duracion)
                     })
-                    messages.success(request, f"Plan '{nombre}' creado.")
+
+                    messages.success(request, f"Plan '{nombre}' creado exitosamente.")
                     return redirect('listar_planes')
                 except ValueError:
-                    messages.error(request, "Error: Precio y duración deben ser numéricos.")
-                    
+                    messages.error(request, "Error: El precio y la duración deben ser números válidos.")
+                                        
     return render(request, 'planes/crear.html')
 
 @verificar_rol(['Admin'])
@@ -943,9 +1015,11 @@ def editar_plan(request, id):
             messages.success(request, "Plan actualizado correctamente.")
             return redirect('listar_planes')
         except ValueError:
-            messages.error(request, "Error: Precio y duración numéricos.")
+            messages.error(request, "Error: El precio y la duración deben ser numéricos.")
             
     item['id_mongo'] = str(item['_id'])
+    
+    # Formatear el precio sin decimales raros para el input type="number"
     if item.get('precio') is not None:
         item['precio_formateado'] = f"{float(item['precio']):.2f}"
         
@@ -958,9 +1032,13 @@ def eliminar_plan(request, id):
         plan = db.planes.find_one(filtro)
         
         if plan:
+            # 1. Bloqueo de integridad: Evitar borrar un plan si hay pagos/suscripciones atadas a él
             nombre_plan = plan.get('nombre')
+            
+            # Buscar en usuarios si alguno tiene esta suscripción activa (como string)
             usuarios_suscritos = db.usuarios.count_documents({"suscripcion.plan": nombre_plan})
             
+            # Buscar en pagos si hay recibos asociados a este plan (usando su idSQL o nombre)
             id_ref = plan.get('idPlanSQL')
             condiciones_pagos = [{"plan": nombre_plan}]
             if id_ref: condiciones_pagos.append({"idPlan": int(id_ref)})
@@ -968,15 +1046,15 @@ def eliminar_plan(request, id):
             pagos_vinculados = db.pagos.count_documents({"$or": condiciones_pagos})
             
             if usuarios_suscritos > 0 or pagos_vinculados > 0:
-                messages.error(request, f"Plan en uso. Protegido por integridad NoSQL.")
+                messages.error(request, f"No se puede eliminar. El plan '{nombre_plan}' está en uso por {usuarios_suscritos} usuarios y tiene {pagos_vinculados} pagos registrados.")
             else:
                 db.planes.delete_one(filtro)
-                messages.success(request, f"Plan eliminado.")
+                messages.success(request, f"Plan '{nombre_plan}' eliminado permanentemente.")
         else:
             messages.error(request, "Plan no encontrado.")
             
     except Exception as e:
-        messages.error(request, f"Error MongoDB: {str(e)}")
+        messages.error(request, f"Error en MongoDB: {str(e)}")
         
     return redirect('listar_planes')
     
