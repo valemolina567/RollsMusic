@@ -57,39 +57,42 @@
                             <th class="text-center pe-4">Acciones</th>
                         </tr>
                     </thead>
-                    <tbody>
-                        {% for item in items %}
-                        <tr>
-                            <td class="ps-4 fw-bold text-muted">{{ item.idPlan }}</td>
-                            <td class="fw-bold">
-                                {% if item.nombre == 'Premium' %}
-                                    <span class="text-info"><i class="bi bi-gem me-2"></i>{{ item.nombre }}</span>
-                                {% else %}
-                                    <span class="text-white"><i class="bi bi-person me-2"></i>{{ item.nombre }}</span>
-                                {% endif %}
-                            </td>
-                            <td class="fw-bold text-white">${{ item.precio }}</td>
-                            <td><i class="bi bi-clock-history text-muted me-1"></i> {{ item.duracionDias }} días</td>
-                            <td class="text-center pe-4">
-                                <div class="d-inline-flex gap-2">
-                                    <a href="{% url 'editar_plan' item.idPlan %}" class="btn btn-outline-info btn-sm">
-                                        <i class="bi bi-pencil-square"></i> Editar
-                                    </a>
-                                    <form action="{% url 'eliminar_plan' item.idPlan %}" method="POST" onsubmit="return confirm('¿Seguro que deseas eliminar este plan?');">
-                                        {% csrf_token %}
-                                        <button type="submit" class="btn btn-outline-danger btn-sm">
-                                            <i class="bi bi-trash3-fill"></i> Eliminar
-                                        </button>
-                                    </form>
-                                </div>
-                            </td>
-                        </tr>
-                        {% empty %}
-                        <tr>
-                            <td colspan="5" class="text-center py-4 text-muted">No hay planes de cobro estructurados en el sistema.</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
+                         <tbody>
+                            {% for item in items %} 
+                            <tr>
+                                <td class="ps-4 fw-bold text-muted">{{ item.idPlan }}</td>
+                                <td class="fw-bold">
+                                    {% if item.nombre == 'Premium' %}
+                                        <span class="text-info"><i class="bi bi-gem me-2"></i>{{ item.nombre }}</span>
+                                    {% else %}
+                                        <span class="text-white"><i class="bi bi-person me-2"></i>{{ item.nombre }}</span>
+                                    {% endif %}
+                                </td>
+                                <td class="fw-bold text-white">${{ item.precio }}</td>
+                                
+                                <td><span class="badge bg-dark border border-secondary">{{ item.duracionMeses }} meses</span></td>
+                                
+                                <td class="text-center pe-4">
+                                    <div class="d-inline-flex gap-2">
+                                        <a href="{% url 'editar_plan' item.id_mongo %}" class="btn btn-outline-info btn-sm">
+                                            <i class="bi bi-pencil-square"></i> Editar
+                                        </a>
+                                        
+                                        <form action="{% url 'eliminar_plan' item.id_mongo %}" method="POST" onsubmit="return confirm('¿Seguro que deseas eliminar permanentemente este plan?');">
+                                            {% csrf_token %}
+                                            <button type="submit" class="btn btn-danger btn-sm" data-nombre="{{ item.nombre }}">
+                                                <i class="bi bi-trash-fill"></i> Eliminar
+                                            </button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="5" class="text-center py-4 text-muted">No hay planes registrados en la plataforma.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
                 </table>
             </div>
         </div>

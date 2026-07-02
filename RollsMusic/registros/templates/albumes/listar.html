@@ -58,6 +58,17 @@
             </a>
         </div>
 
+        {% if messages %}
+            <div class="mb-4">
+                {% for message in messages %}
+                    <div class="alert {% if message.tags == 'error' %}alert-danger bg-danger{% elif message.tags == 'success' %}alert-success bg-success{% else %}alert-info bg-info{% endif %} text-white border-0 alert-dismissible fade show d-flex align-items-center" role="alert">
+                        <i class="bi {% if message.tags == 'error' %}bi-exclamation-octagon-fill{% elif message.tags == 'success' %}bi-check-circle-fill{% else %}bi-info-circle-fill{% endif %} me-2 fs-5"></i>
+                        <div>{{ message }}</div>
+                        <button type="button" class="btn-close btn-close-white ms-auto" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
         <div class="admin-card p-3 mb-4">
             <form method="GET" action="{% url 'listar_albumes' %}" class="row g-2 align-items-center">
                 <div class="col-10 col-md-11">
@@ -85,44 +96,53 @@
                             <th class="text-center pe-4">Acciones</th>
                         </tr>
                     </thead>
-                    <tbody>
-                        {% for item in items %}
-                        <tr>
-                            <td class="ps-4">
-                                {% if item.imagen %}
-                                    <img src="{{ item.imagen.url }}" class="album-img">
-                                {% else %}
-                                    <img src="{% static 'images/default_track.png' %}" class="album-img">
-                                {% endif %}
-                            </td>
-                            
-                            <td class="fw-bold text-muted">{{ item.idAlbum }}</td>
-                            <td class="fw-bold text-white">{{ item.titulo }}</td>
-                            <td>{{ item.fechaLanzamiento }}</td>
-                            <td><span class="badge bg-dark border border-secondary">{{ item.Artista_idArtista.nombre }}</span></td>
-                            <td class="text-center pe-4">
-                                <div class="d-inline-flex gap-2">
-                                    <a href="{% url 'editar_album' item.idAlbum %}" class="btn btn-outline-info btn-sm">
-                                        <i class="bi bi-pencil-square"></i> Editar
-                                    </a>
-                                    <form action="{% url 'eliminar_album' item.idAlbum %}" method="POST" onsubmit="return confirm('¿Seguro que deseas eliminar este álbum?');">
-                                        {% csrf_token %}
-                                        <button type="submit" class="btn btn-outline-danger btn-sm">
-                                            <i class="bi bi-trash3-fill"></i> Eliminar
-                                        </button>
-                                    </form>
-                                </div>
-                            </td>
-                        </tr>
-                        {% empty %}
-                        <tr>
-                            <td colspan="6" class="text-center py-4 text-muted">No hay álbumes registrados en la plataforma.</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
+                        <tbody>
+                            {% for item in items %} 
+                            <tr>
+                                <td class="ps-4">
+                                    {% if item.imagen_url %}
+                                        <img src="{{ item.imagen_url }}" class="album-img" style="width: 45px; height: 45px; object-fit: cover; border-radius: 4px;" loading="lazy">
+                                    {% else %}
+                                        <img src="{% static 'images/default_album.png' %}" class="album-img" style="width: 45px; height: 45px; object-fit: cover; border-radius: 4px;" loading="lazy">
+                                    {% endif %}
+                                </td>
+                                
+                                <td class="fw-bold text-muted">{{ item.idAlbum }}</td>
+                                
+                                <td class="fw-bold text-white">
+                                    <i class="bi bi-disc-fill text-info me-2"></i> {{ item.titulo }}
+                                </td>
+                                
+                                <td>{{ item.fechaLanzamiento }}</td>
+                                
+                                <td><span class="badge bg-dark border border-secondary px-3"><i class="bi bi-person-fill me-1 text-muted"></i> {{ item.artista_nombre }}</span></td>
+                                
+                                <td class="text-center pe-4">
+                                    <div class="d-inline-flex gap-2">
+                                        <a href="{% url 'editar_album' item.id_mongo %}" class="btn btn-outline-info btn-sm">
+                                            <i class="bi bi-pencil-square"></i> Editar
+                                        </a>
+                                        
+                                        <form action="{% url 'eliminar_album' item.id_mongo %}" method="POST" onsubmit="return confirm('¿Seguro que deseas eliminar este álbum?');">
+                                            {% csrf_token %}
+                                            <button type="submit" class="btn btn-danger btn-sm" data-nombre="{{ item.titulo }}">
+                                                <i class="bi bi-trash-fill"></i> Eliminar
+                                            </button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="6" class="text-center py-4 text-muted">No hay álbumes registrados en la plataforma.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
                 </table>
             </div>
         </div>
     </div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
