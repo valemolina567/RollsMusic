@@ -1,0 +1,530 @@
+[1mdiff --git a/RollsMusic/registros/templates/usuarios/crear.html b/RollsMusic/registros/templates/usuarios/crear.html[m
+[1mindex e307909..263c4a4 100644[m
+[1m--- a/RollsMusic/registros/templates/usuarios/crear.html[m
+[1m+++ b/RollsMusic/registros/templates/usuarios/crear.html[m
+[36m@@ -78,13 +78,12 @@[m
+                     </div>[m
+                     <div class="col-md-6">[m
+                         <label for="rol" class="form-label">Rol del Usuario</label>[m
+[31m-                        <select name="rol" id="rol" class="form-select">[m
+[31m-                            {% for rol in roles %}[m
+[31m-                            <option value="{{ rol.idRol }}" {% if rol.idRol == 2 %}selected{% endif %}>[m
+[31m-                                {{ rol.nombre }}[m
+[31m-                            </option>[m
+[31m-                            {% endfor %}[m
+[31m-                        </select>[m
+[32m+[m[32m                            <select name="rol" class="form-control" required>[m
+[32m+[m[32m                                <option value="" disabled selected>Selecciona un rol...</option>[m
+[32m+[m[32m                                <option value="Cliente">Cliente</option>[m
+[32m+[m[32m                                <option value="Artista">Artista</option>[m
+[32m+[m[32m                                <option value="Administrador">Administrador</option>[m
+[32m+[m[32m                            </select>[m
+                     </div>[m
+                 </div>[m
+ [m
+[1mdiff --git a/RollsMusic/registros/templates/usuarios/editar.html b/RollsMusic/registros/templates/usuarios/editar.html[m
+[1mindex 334d0ac..3ea70bb 100644[m
+[1m--- a/RollsMusic/registros/templates/usuarios/editar.html[m
+[1m+++ b/RollsMusic/registros/templates/usuarios/editar.html[m
+[36m@@ -86,13 +86,12 @@[m
+                     </div>[m
+                         <div class="col-md-6">[m
+                             <label for="rol" class="form-label">Rol del Usuario</label>[m
+[31m-                            <select name="rol" id="rol" class="form-select">[m
+[31m-                                {% for rol in roles %}[m
+[31m-                                <option value="{{ rol.idRol }}" {% if rol.idRol == usuario.Rol_idRol_id %}selected{% endif %}>[m
+[31m-                                    {{ rol.nombre }}[m
+[31m-                                </option>[m
+[31m-                                {% endfor %}[m
+[32m+[m[32m                            <select name="rol" class="form-select" required>[m
+[32m+[m[32m                                <option value="Cliente" {% if usuario.rol_nombre == 'Cliente' %}selected{% endif %}>Cliente</option>[m
+[32m+[m[32m                                <option value="Artista" {% if usuario.rol_nombre == 'Artista' %}selected{% endif %}>Artista</option>[m
+[32m+[m[32m                                <option value="Administrador" {% if usuario.rol_nombre == 'Administrador' %}selected{% endif %}>Administrador</option>[m
+                             </select>[m
+[32m+[m[41m                         [m
+                         </div>[m
+                 </div>[m
+ [m
+[1mdiff --git a/RollsMusic/registros/templates/usuarios/listar.html b/RollsMusic/registros/templates/usuarios/listar.html[m
+[1mindex c42622d..60108d2 100644[m
+[1m--- a/RollsMusic/registros/templates/usuarios/listar.html[m
+[1m+++ b/RollsMusic/registros/templates/usuarios/listar.html[m
+[36m@@ -97,17 +97,17 @@[m
+                             </td>[m
+                             <td class="text-center pe-4">[m
+                                 <div class="d-inline-flex gap-2">[m
+[31m-                                    <a href="{% url 'editar_usuario' usuario.idUsuario %}" class="btn btn-outline-info btn-sm">[m
+[32m+[m[32m                                    <a href="{% url 'editar_usuario' usuario.id_mongo %}" class="btn btn-outline-info btn-sm">[m
+                                         <i class="bi bi-pencil-square"></i> Editar[m
+                                     </a>[m
+[31m-                                    <form action="{% url 'eliminar_usuario' usuario.idUsuario %}" method="POST" onsubmit="return confirm('¿Seguro que deseas eliminar permanentemente a este usuario?');">[m
+[32m+[m[41m                                    [m
+[32m+[m[32m                                    <form action="{% url 'eliminar_usuario' usuario.id_mongo %}" method="POST" onsubmit="return confirm('¿Seguro que deseas eliminar permanentemente a este usuario?');">[m
+                                         {% csrf_token %}[m
+                                         <button type="button" [m
+                                         class="btn btn-danger btn-sm btn-eliminar-usuario" [m
+[31m-                                        data-url="{% url 'eliminar_usuario' usuario.idUsuario %}"[m
+[31m-                                        data-nombre="{{ usuario.nombre }} {{ usuario.apellido }}">[m
+[32m+[m[32m                                        data-url="{% url 'eliminar_usuario' usuario.id_mongo %}" data-nombre="{{ usuario.nombre }} {{ usuario.apellido }}">[m
+                                         <i class="bi bi-trash-fill"></i> Eliminar[m
+[31m-</button>[m
+[32m+[m[32m                                        </button>[m
+                                     </form>[m
+                                 </div>[m
+                             </td>[m
+[1mdiff --git a/RollsMusic/registros/urls.py b/RollsMusic/registros/urls.py[m
+[1mindex 86dbcc1..9c216fd 100644[m
+[1m--- a/RollsMusic/registros/urls.py[m
+[1m+++ b/RollsMusic/registros/urls.py[m
+[36m@@ -12,8 +12,8 @@[m [murlpatterns = [[m
+    # Usuarios (Nombres específicos y claros)[m
+    path('usuarios/', views.listar_usuarios, name='listar_usuarios'),[m
+    path('usuarios/crear/', views.crear_usuario, name='crear_usuario'),[m
+[31m-   path('usuarios/editar/<int:id>/', views.editar_usuario, name='editar_usuario'),[m
+[31m-   path('usuarios/eliminar/<int:id>/', views.eliminar_usuario, name='eliminar_usuario'),[m
+[32m+[m[32m   path('usuarios/editar/<str:id>/', views.editar_usuario, name='editar_usuario'),[m[41m [m
+[32m+[m[32m   path('usuarios/eliminar/<str:id>/', views.eliminar_usuario, name='eliminar_usuario'),[m[41m [m
+ [m
+     # Discográficas[m
+     path('discograficas/', views.listar_discograficas, name='listar_discograficas'),[m
+[1mdiff --git a/RollsMusic/registros/views.py b/RollsMusic/registros/views.py[m
+[1mindex ca565e9..2e867d3 100644[m
+[1m--- a/RollsMusic/registros/views.py[m
+[1m+++ b/RollsMusic/registros/views.py[m
+[36m@@ -50,22 +50,144 @@[m [mdef verificar_rol(roles_permitidos):[m
+         return _wrapped_view[m
+     return decorator[m
+ [m
+[32m+[m[32m# ==========================================[m
+[32m+[m[32m# CRUD: USUARIOS (100% MONGODB)[m
+[32m+[m[32m# ==========================================[m
+[32m+[m
+ @verificar_rol(['Admin'])[m
+ def listar_usuarios(request):[m
+     query = request.GET.get('q', '').strip()[m
+     [m
+[32m+[m[32m    # 1. Filtro de búsqueda NoSQL (Reemplaza a Q() de Django)[m
+[32m+[m[32m    filtro = {}[m
+     if query:[m
+[31m-        # Busca coincidencias tanto en el nombre como en el apellido[m
+[31m-        usuarios = Usuario.objects.filter(Q(nombre__icontains=query) | Q(apellido__icontains=query))[m
+[31m-    else:[m
+[31m-        usuarios = Usuario.objects.all()[m
+[32m+[m[32m        filtro = {[m
+[32m+[m[32m            "$or": [[m
+[32m+[m[32m                {"nombre": {"$regex": query, "$options": "i"}},[m
+[32m+[m[32m                {"apellido": {"$regex": query, "$options": "i"}}[m
+[32m+[m[32m            ][m
+[32m+[m[32m        }[m
+[32m+[m[41m        [m
+[32m+[m[32m    # 2. Consultamos directamente a la colección db.usuarios[m
+[32m+[m[32m    usuarios_mongo = list(db.usuarios.find(filtro))[m
+[32m+[m[41m    [m
+[32m+[m[32m    # 3. Preparamos el diccionario para que el HTML no se rompa[m
+[32m+[m[32m    for u in usuarios_mongo:[m
+[32m+[m[32m        # Extraemos el ID como string para pasarlo a los botones de Editar/Eliminar[m
+[32m+[m[32m        u['id_mongo'] = str(u['_id'])[m
+[32m+[m[32m        # Conservamos el ID visual de SQL si existe, sino usamos parte del Object ID[m
+[32m+[m[32m        u['idUsuario'] = u.get('idUsuarioSQL') or str(u['_id'])[-6:].upper()[m
+[32m+[m[32m        # Valores por defecto para evitar errores en vista[m
+[32m+[m[32m        u['nombre'] = u.get('nombre', 'Sin nombre')[m
+[32m+[m[32m        u['apellido'] = u.get('apellido', '')[m
+[32m+[m[32m        u['correo'] = u.get('correo', 'Sin correo')[m
+[32m+[m[32m        u['estado'] = u.get('estado', 'Inactivo')[m
+[32m+[m[32m        u['rol_nombre'] = u.get('rol', 'Cliente') # Antes era u.Rol_idRol.nombre[m
+[32m+[m[41m        [m
+[32m+[m[32m    return render(request, 'usuarios/listar.html', {'usuarios': usuarios_mongo})[m
+[32m+[m
+[32m+[m[32m@verificar_rol(['Admin'])[m
+[32m+[m[32mdef crear_usuario(request):[m
+[32m+[m[32m    if request.method == 'POST':[m
+[32m+[m[32m        nombre = request.POST.get('nombre', '').strip()[m
+[32m+[m[32m        apellido = request.POST.get('apellido', '').strip()[m
+[32m+[m[32m        correo = request.POST.get('correo', '').strip()[m
+[32m+[m[32m        fecha_nacimiento = request.POST.get('fechaNacimiento', '').strip()[m
+[32m+[m[32m        contrasenia = request.POST.get('contrasenia', '').strip()[m
+[32m+[m[32m        # Obtenemos el texto directo del rol en lugar de un ID relacional[m
+[32m+[m[32m        rol = request.POST.get('rol', 'Cliente')[m[41m [m
+[32m+[m
+[32m+[m[32m        # Validación rápida de correo duplicado en MongoDB[m
+[32m+[m[32m        if db.usuarios.find_one({"correo": correo}):[m
+[32m+[m[32m            messages.error(request, "Error: Este correo ya se encuentra registrado.")[m
+[32m+[m[32m            return redirect('crear_usuario')[m
+[32m+[m
+[32m+[m[32m        # Documento BSON para insertar[m
+[32m+[m[32m        nuevo_usuario = {[m
+[32m+[m[32m            "nombre": nombre,[m
+[32m+[m[32m            "apellido": apellido,[m
+[32m+[m[32m            "correo": correo,[m
+[32m+[m[32m            "contrasenia": contrasenia,[m
+[32m+[m[32m            "fechaNacimiento": fecha_nacimiento,[m
+[32m+[m[32m            "fechaRegistro": datetime.now(),[m
+[32m+[m[32m            "estado": "Activo",[m
+[32m+[m[32m            "imagen": "default.png",[m
+[32m+[m[32m            "rol": rol,[m
+[32m+[m[32m            "suscripcion": {"plan": "Free", "estado": "Activa"}[m
+[32m+[m[32m        }[m
+         [m
+[31m-    return render(request, 'usuarios/listar.html', {'usuarios': usuarios})[m
+[32m+[m[32m        db.usuarios.insert_one(nuevo_usuario)[m
+[32m+[m[32m        messages.success(request, f"Usuario {nombre} {apellido} creado correctamente en MongoDB.")[m
+[32m+[m[32m        return redirect('listar_usuarios')[m
+[32m+[m[41m    [m
+[32m+[m[32m    # Lista estática de roles para cargar en el <select>[m
+[32m+[m[32m    roles = [{'nombre': 'Administrador'}, {'nombre': 'Artista'}, {'nombre': 'Cliente'}][m
+[32m+[m[32m    return render(request, 'usuarios/crear.html', {'roles': roles})[m
+[32m+[m
+[32m+[m[32m@verificar_rol(['Admin'])[m
+[32m+[m[32mdef editar_usuario(request, id):[m
+[32m+[m[32m    # Soporta tanto IDs de MongoDB como los viejos de SQL[m
+[32m+[m[32m    filtro = {"_id": ObjectId(id)} if len(str(id)) == 24 else {"idUsuarioSQL": int(id)}[m
+[32m+[m[32m    usuario = db.usuarios.find_one(filtro)[m
+[32m+[m[41m    [m
+[32m+[m[32m    if request.method == 'POST':[m
+[32m+[m[32m        db.usuarios.update_one(filtro, {[m
+[32m+[m[32m            "$set": {[m
+[32m+[m[32m                "nombre": request.POST.get('nombre', '').strip(),[m
+[32m+[m[32m                "apellido": request.POST.get('apellido', '').strip(),[m
+[32m+[m[32m                "correo": request.POST.get('correo', '').strip(),[m
+[32m+[m[32m                "estado": request.POST.get('estado', '').strip(),[m
+[32m+[m[32m                "rol": request.POST.get('rol', usuario.get('rol')),[m
+[32m+[m[32m                "fechaNacimiento": request.POST.get('fechaNacimiento', usuario.get('fechaNacimiento'))[m
+[32m+[m[32m            }[m
+[32m+[m[32m        })[m
+[32m+[m[32m        messages.success(request, "El perfil ha sido actualizado exitosamente en MongoDB.")[m
+[32m+[m[32m        return redirect('listar_usuarios')[m
+[32m+[m[41m        [m
+[32m+[m[32m    roles = [{'nombre': 'Administrador'}, {'nombre': 'Artista'}, {'nombre': 'Cliente'}][m
+[32m+[m[32m    usuario['idUsuario'] = str(usuario['_id']) # Requerido para la url del action del formulario[m
+[32m+[m[32m    usuario['rol_nombre'] = usuario.get('rol')[m
+[32m+[m[41m    [m
+[32m+[m[32m    return render(request, 'usuarios/editar.html', {'usuario': usuario, 'roles': roles})[m
+[32m+[m
+[32m+[m[32m@verificar_rol(['Admin'])[m
+[32m+[m[32mdef eliminar_usuario(request, id):[m
+[32m+[m[32m    try:[m
+[32m+[m[32m        filtro = {"_id": ObjectId(id)} if len(str(id)) == 24 else {"idUsuarioSQL": int(id)}[m
+[32m+[m[32m        db.usuarios.delete_one(filtro)[m
+[32m+[m[32m        messages.success(request, "Usuario eliminado correctamente de la plataforma NoSQL.")[m
+[32m+[m[32m    except Exception as e:[m
+[32m+[m[32m        messages.error(request, f"Error en MongoDB: {str(e)}")[m
+[32m+[m[41m    [m
+[32m+[m[32m    return redirect('listar_usuarios')[m
+ [m
+[31m-# PANEL DE INICIO GENERAL[m
+ @verificar_rol(['Admin'])[m
+ def index(request):[m
+[31m-    return render(request, 'index.html')[m
+[32m+[m[32m    """[m
+[32m+[m[32m    Panel principal del Administrador.[m
+[32m+[m[32m    Calcula los totales ultra rápidos usando PyMongo.[m
+[32m+[m[32m    """[m
+[32m+[m[32m    try:[m
+[32m+[m[32m        # Reemplazamos los Modelo.objects.count() por count_documents de Mongo[m
+[32m+[m[32m        total_usuarios = db.usuarios.count_documents({})[m
+[32m+[m[32m        total_artistas = db.artistas.count_documents({})[m
+[32m+[m[32m        total_albumes = db.albumes.count_documents({})[m
+[32m+[m[32m        total_canciones = db.canciones.count_documents({})[m
+[32m+[m
+[32m+[m[32m        context = {[m
+[32m+[m[32m            'total_usuarios': total_usuarios,[m
+[32m+[m[32m            'total_artistas': total_artistas,[m
+[32m+[m[32m            'total_albumes': total_albumes,[m
+[32m+[m[32m            'total_canciones': total_canciones,[m
+[32m+[m[32m        }[m
+[32m+[m[32m    except Exception as e:[m
+[32m+[m[32m        # Valores por defecto en caso de fallo de conexión[m
+[32m+[m[32m        context = {[m
+[32m+[m[32m            'total_usuarios': 0, 'total_artistas': 0,[m
+[32m+[m[32m            'total_albumes': 0, 'total_canciones': 0,[m
+[32m+[m[32m        }[m
+[32m+[m[41m        [m
+[32m+[m[32m    return render(request, 'index.html', context)[m
+ [m
+ # ==========================================[m
+ # CRUD: DISCOGRAFICAS[m
+[36m@@ -575,184 +697,76 @@[m [mdef eliminar_plan(request, id):[m
+     if request.method == 'POST':[m
+         item.delete()[m
+         return redirect('listar_planes')[m
+[31m-[m
+[31m-# ==========================================[m
+[31m-# CRUD: USUARIOS[m
+[31m-# ==========================================[m
+[31m-[m
+[31m-@verificar_rol(['Admin'])[m
+[31m-def crear_usuario(request):[m
+[31m-    if request.method == 'POST':[m
+[31m-        nombre = request.POST.get('nombre', '').strip()[m
+[31m-        apellido = request.POST.get('apellido', '').strip()[m
+[31m-        correo = request.POST.get('correo', '').strip()[m
+[31m-        fecha_nacimiento = request.POST.get('fechaNacimiento', '').strip()[m
+[31m-        contrasenia = request.POST.get('contrasenia', '').strip()[m
+[31m-        rol_id = request.POST.get('rol', 2) [m
+[31m-[m
+[31m-        errores = [][m
+[31m-        if not nombre: errores.append("El nombre es obligatorio")[m
+[31m-        if not apellido: errores.append("El apellido es obligatorio")[m
+[31m-        if not correo: errores.append("El correo es obligatorio")[m
+[31m-        if not contrasenia: errores.append("La contraseña es obligatoria")[m
+[31m-        [m
+[31m-        fecha_nacimiento_dt = None[m
+[31m-        if not fecha_nacimiento:[m
+[31m-            errores.append("La fecha de nacimiento es obligatoria")[m
+[31m-        else:[m
+[31m-            try: fecha_nacimiento_dt = date.fromisoformat(fecha_nacimiento)[m
+[31m-            except ValueError: errores.append("La fecha de nacimiento no tiene un formato válido (YYYY-MM-DD)")[m
+[31m-        [m
+[31m-        if errores:[m
+[31m-            for e in errores: messages.error(request, e)[m
+[31m-            return render(request, 'usuarios/crear.html')[m
+[31m-        [m
+[31m-        rol_obj = get_object_or_404(Rol, idRol=rol_id)[m
+[31m-[m
+[31m-        Usuario.objects.create([m
+[31m-            nombre=nombre, apellido=apellido, correo=correo, contrasenia=contrasenia,[m
+[31m-            fechaRegistro=date.today(), estado='Activo', imagen='default.png', [m
+[31m-            fechaNacimiento=fecha_nacimiento_dt,[m
+[31m-            Rol_idRol=rol_obj [m
+[31m-        )[m
+[31m-        messages.success(request, "Usuario creado correctamente")[m
+[31m-        return redirect('listar_usuarios') # Corregido: apuntaba a 'listar' y tu vista se llama 'listar_usuarios'[m
+[31m-    [m
+[31m-    roles = Rol.objects.all()[m
+[31m-    return render(request, 'usuarios/crear.html', {'roles': roles})[m
+[31m-[m
+[31m-@verificar_rol(['Admin'])[m
+[31m-def editar_usuario(request, id):[m
+[31m-    usuario = get_object_or_404(Usuario, idUsuario=id)[m
+[31m-    roles = Rol.objects.all() [m
+[31m-    [m
+[31m-    if request.method == 'POST':[m
+[31m-        usuario.nombre = request.POST.get('nombre', '').strip()[m
+[31m-        usuario.apellido = request.POST.get('apellido', '').strip()[m
+[31m-        usuario.correo = request.POST.get('correo', '').strip()[m
+[31m-        usuario.estado = request.POST.get('estado', '').strip()[m
+[31m-        [m
+[31m-        if request.POST.get('fechaNacimiento'):[m
+[31m-            usuario.fechaNacimiento = request.POST.get('fechaNacimiento')[m
+[31m-            [m
+[31m-        id_rol = request.POST.get('rol')[m
+[31m-        if id_rol:[m
+[31m-            usuario.Rol_idRol_id = int(id_rol)[m
+[31m-            [m
+[31m-        usuario.save()[m
+[31m-        [m
+[31m-        # CONFIRMACIÓN VISUAL: Agregamos una notificación de éxito[m
+[31m-        messages.success(request, f"El perfil de '{usuario.nombre} {usuario.apellido}' ha sido actualizado exitosamente.")[m
+[31m-        return redirect('listar_usuarios')[m
+[31m-        [m
+[31m-    return render(request, 'usuarios/editar.html', {[m
+[31m-        'usuario': usuario,[m
+[31m-        'roles': roles[m
+[31m-    })[m
+[31m-[m
+[31m-@verificar_rol(['Admin'])[m
+[31m-def eliminar_usuario(request, id):[m
+[31m-    usuario = get_object_or_404(Usuario, idUsuario=id)[m
+[31m-    # Quitamos el "if request.method == 'POST'" para que acepte el viaje directo de SweetAlert2[m
+[31m-    try:[m
+[31m-        usuario.delete()[m
+[31m-        messages.success(request, "Usuario eliminado correctamente de la plataforma.")[m
+[31m-    except Exception as e:[m
+[31m-        # SQL Server frenará el borrado si el usuario tiene playlists, reproducciones, etc.[m
+[31m-        messages.error(request, "No se pudo eliminar el usuario debido a dependencias activas en la base de datos.")[m
+[31m-    [m
+[31m-    # Este return ahora sí se ejecuta siempre, sin importar si es GET o POST[m
+[31m-    return redirect('listar_usuarios')[m
+     [m
+ # ==========================================[m
+ # SISTEMA DE AUTENTICACIÓN (LOGIN / LOGOUT) - MIGRADO A MONGODB [m
+ # ==========================================[m
+ [m
+ def login_view(request):[m
+[32m+[m[32m    """[m
+[32m+[m[32m    Controlador global de autenticación para Proyecto RollsMusic utilizando MongoDB (PyMongo).[m
+[32m+[m[32m    """[m
+[32m+[m[41m    [m
+[32m+[m[32m    # 1. CONTROL ANTIBUCLE CORREGIDO[m
+[32m+[m[32m    if 'usuario_id' in request.session:[m
+[32m+[m[32m        # Ahora usamos 'usuario_rol' para coincidir con tu decorador[m
+[32m+[m[32m        rol_activo = request.session.get('usuario_rol', 'Cliente')[m[41m [m
+[32m+[m[32m        if rol_activo == 'Admin':[m
+[32m+[m[32m            return redirect('index') # Tu vista de admin se llama 'index'[m
+[32m+[m[32m        elif rol_activo == 'Artista':[m
+[32m+[m[32m            return redirect('dashboard_artista')[m
+[32m+[m[32m        else:[m
+[32m+[m[32m            return redirect('dashboard_usuario')[m
+[32m+[m
+     if request.method == 'POST':[m
+         correo = request.POST.get('correo', '').strip()[m
+[31m-        contrasenia = request.POST.get('contrasenia', '').strip()[m
+[32m+[m[41m        [m
+[32m+[m[32m        # 2. COINCIDENCIA EXACTA CON EL HTML ('contrasenia')[m
+[32m+[m[32m        password_ingresada = request.POST.get('contrasenia', '')[m
+ [m
+[31m-        if not correo or not contrasenia:[m
+[31m-            messages.error(request, "Por favor, completa todos los campos.")[m
+[31m-            return render(request, 'auth/login.html')[m
+[32m+[m[32m        if not correo or not password_ingresada:[m
+[32m+[m[32m            messages.error(request, 'Por favor, complete todos los campos.')[m
+[32m+[m[32m            return render(request, 'login.html')[m
+ [m
+         try:[m
+[31m-            usuario = db.usuarios.find_one({"correo": correo})[m
+[31m-            [m
+[32m+[m[32m            usuario = db.usuarios.find_one({[m
+[32m+[m[32m                "correo": correo,[m
+[32m+[m[32m                "contrasenia": password_ingresada[m
+[32m+[m[32m            })[m
+[32m+[m
+             if usuario:[m
+[31m-                if usuario.get('contrasenia') == contrasenia:[m
+[31m-                    if usuario.get('estado') != 'Activo':[m
+[31m-                        messages.error(request, f"Tu cuenta se encuentra: {usuario.get('estado')}. Contacta al administrador.")[m
+[31m-                        return render(request, 'auth/login.html')[m
+[31m-                    [m
+[31m-                    # 1. Obtener el ID original migrado o el nuevo _id[m
+[31m-                    user_id = usuario.get('idUsuarioSQL') or usuario.get('idUsuario') or str(usuario['_id']) [m
+[31m-                    request.session['usuario_id'] = str(user_id)[m
+[31m-                    request.session['usuario_nombre'] = f"{usuario.get('nombre', '')} {usuario.get('apellido', '')}"[m
+[31m-                    [m
+[31m-                    # 2. Extraer rol explícito si lo hay[m
+[31m-                    rol_db = str(usuario.get('rol', '')).strip().capitalize()[m
+[31m-                    [m
+[31m-                    # Si el rol es numérico o no existe, verificar los campos clásicos de SQL[m
+[31m-                    id_rol = usuario.get('Rol_idRol') or usuario.get('idRol') or usuario.get('rol_id') or usuario.get('Rol_id')[m
+[31m-                    [m
+[31m-                    if not rol_db or rol_db == 'None':[m
+[31m-                        if id_rol == 1:[m
+[31m-                            rol_db = 'Admin'[m
+[31m-                        elif id_rol == 2:[m
+[31m-                            rol_db = 'Artista'[m
+[31m-                        else:[m
+[31m-                            rol_db = 'Cliente'[m
+[31m-                            [m
+[31m-                    # 3. VERIFICACIÓN EXPANSIVA: Búsqueda en la colección de artistas[m
+[31m-                    # Convertimos el ID a número por si la migración lo guardó como Int[m
+[31m-                    user_query_val = int(user_id) if str(user_id).isdigit() else str(user_id)[m
+[31m-                    [m
+[31m-                    es_artista = db.artistas.find_one({[m
+[31m-                        "$or": [[m
+[31m-                            {"idUsuario": user_query_val},[m
+[31m-                            {"idUsuario": str(user_id)},[m
+[31m-                            {"Usuario_idUsuario": user_query_val},[m
+[31m-                            {"usuario_id": user_query_val},[m
+[31m-                            {"Usuario_id": user_query_val},[m
+[31m-                            {"idUsuarioSQL": user_query_val}[m
+[31m-                        ][m
+[31m-                    })[m
+[31m-                    [m
+[31m-                    if es_artista:[m
+[31m-                        rol_db = 'Artista'[m
+[31m-                        [m
+[31m-                    # ==========================================[m
+[31m-                    # 🐞 DEBUG: Imprimir en el CMD para rastrear el error[m
+[31m-                    # ==========================================[m
+[31m-                    print("\n" + "="*50)[m
+[31m-                    print(f"🔍 DEBUG LOGIN - USUARIO: {correo}")[m
+[31m-                    print(f"1. ID detectado (user_id): {user_id}")[m
+[31m-                    print(f"2. Rol numérico en BD (id_rol): {id_rol}")[m
+[31m-                    print(f"3. Rol en texto (rol_db): {rol_db}")[m
+[31m-                    print(f"4. ¿Se encontró en db.artistas?: {'SÍ ✅' if es_artista else 'NO ❌'}")[m
+[31m-                    if not es_artista:[m
+[31m-                        print("   -> El sistema te mandará al panel de usuario porque no halló tu perfil de artista.")[m
+[31m-                    print("="*50 + "\n")[m
+[31m-                    # ==========================================[m
+[31m-                        [m
+[31m-                    request.session['usuario_rol'] = rol_db[m
+[31m-                    [m
+[31m-                    # Redirección final[m
+[31m-                    if rol_db == 'Admin':[m
+[31m-                        return redirect('index')[m
+[31m-                    elif rol_db == 'Artista':[m
+[31m-                        return redirect('dashboard_artista')[m
+[31m-                    else:[m
+[31m-                        return redirect('dashboard_usuario')[m
+[32m+[m[32m                if usuario.get('estado') != 'Activo':[m
+[32m+[m[32m                    messages.error(request, 'Esta cuenta se encuentra actualmente inactiva.')[m
+[32m+[m[32m                    return render(request, 'login.html')[m
+[32m+[m
+[32m+[m[32m                # 3. CREACIÓN DE SESIÓN (Sincronizada con el decorador)[m
+[32m+[m[32m                request.session['usuario_id'] = str(usuario['_id'])[m
+[32m+[m[41m                [m
+[32m+[m[32m                # Normalizamos el nombre del rol para que pase las validaciones de tu decorador[m
+[32m+[m[32m                rol_bd = usuario.get('rol', 'Cliente')[m
+[32m+[m[32m                if rol_bd == 'Administrador':[m
+[32m+[m[32m                    request.session['usuario_rol'] = 'Admin'[m
+                 else:[m
+[31m-                    messages.error(request, "Contraseña incorrecta.")[m
+[31m-            else:[m
+[31m-                messages.error(request, "El correo electrónico no está registrado.")[m
+[32m+[m[32m                    request.session['usuario_rol'] = rol_bd[m
+[32m+[m
+[32m+[m[32m                request.session['nombre'] = usuario.get('nombre', '')[m
+[32m+[m[32m                request.session['apellido'] = usuario.get('apellido', '')[m
+[32m+[m
+[32m+[m[32m                # 4. REDIRECCIÓN SEGÚN TU urls.py[m
+[32m+[m[32m                rol = request.session['usuario_rol'][m
+                 [m
+[32m+[m[32m                if rol == 'Admin':[m
+[32m+[m[32m                    return redirect('index') # Redirige a la vista index (Admin)[m
+[32m+[m[32m                elif rol == 'Artista':[m
+[32m+[m[32m                    return redirect('dashboard_artista')[m[41m [m
+[32m+[m[32m                else:[m
+[32m+[m[32m                    return redirect('dashboard_usuario')[m[41m [m
+[32m+[m
+[32m+[m[32m            else:[m
+[32m+[m[32m                messages.error(request, 'Credenciales incorrectas. Inténtelo de nuevo.')[m
+[32m+[m
+         except Exception as e:[m
+[31m-            messages.error(request, f"Error al conectar con la base de datos: {str(e)}")[m
+[32m+[m[32m            messages.error(request, f'Error de conexión con la base de datos: {str(e)}')[m
+ [m
+     return render(request, 'auth/login.html')[m
+ [m
+[36m@@ -1099,21 +1113,38 @@[m [mdef procesar_pago(request):[m
+             [m
+     return render(request, 'dashboards/facturacion.html')[m
+ [m
+[32m+[m[32m# MANTENIMIENTO DE SUSCRIPCIONES[m
+ @verificar_rol(['Admin'])[m
+ def verificar_suscripciones(request):[m
+[31m-    # Verificación de seguridad: Solo el Admin puede ejecutar esto[m
+[32m+[m[32m    """[m
+[32m+[m[32m    Reemplazo del Procedimiento Almacenado de SQL Server.[m
+[32m+[m[32m    Actualiza el estado de las suscripciones vencidas directamente en Mongo.[m
+[32m+[m[32m    """[m
+     if 'usuario_id' not in request.session or request.session.get('usuario_rol') != 'Admin':[m
+         messages.error(request, "Acceso denegado. Esta acción es exclusiva para administradores.")[m
+         return redirect('login')[m
+         [m
+     try:[m
+[31m-        with connection.cursor() as cursor:[m
+[31m-            # Consumo del Procedimiento Almacenado que contiene el Cursor[m
+[31m-            cursor.execute("EXEC Facturacion.sp_VerificarSuscripcionesVencidas")[m
+[32m+[m[32m        fecha_actual = datetime.now()[m
+[32m+[m[41m        [m
+[32m+[m[32m        # Actualización masiva: Busca planes Premium que ya pasaron su fecha de fin[m
+[32m+[m[32m        # y los degrada a Free usando $set[m
+[32m+[m[32m        resultado = db.usuarios.update_many([m
+[32m+[m[32m            {[m
+[32m+[m[32m                "suscripcion.plan": "Premium",[m
+[32m+[m[32m                "suscripcion.fechaFin": {"$lt": fecha_actual}[m
+[32m+[m[32m            },[m
+[32m+[m[32m            {[m
+[32m+[m[32m                "$set": {[m
+[32m+[m[32m                    "suscripcion.plan": "Free",[m
+[32m+[m[32m                    "suscripcion.estado": "Vencida"[m
+[32m+[m[32m                }[m
+[32m+[m[32m            }[m
+[32m+[m[32m        )[m
+             [m
+[31m-        messages.success(request, "⚙️ Mantenimiento completado: El cursor ha verificado y actualizado las suscripciones vencidas exitosamente.")[m
+[32m+[m[32m        messages.success(request, f"⚙️ Mantenimiento completado: Se degradaron {resultado.modified_count} suscripciones vencidas a plan Free.")[m
+     except Exception as e:[m
+[31m-        messages.error(request, f"Error al ejecutar el cursor de mantenimiento: {str(e)}")[m
+[32m+[m[32m        messages.error(request, f"Error al ejecutar el mantenimiento NoSQL: {str(e)}")[m
+         [m
+     return redirect('index')[m
+ [m

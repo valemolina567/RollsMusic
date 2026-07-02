@@ -10,7 +10,7 @@
     <style>
         :root { --rm-bg: #111111; --rm-surface: #1E1E1E; --rm-accent: #00AEEF; --rm-text-primary: #FFFFFF; --rm-text-secondary: #CCCCCC; }
         body { background-color: var(--rm-bg); color: var(--rm-text-primary); font-family: 'Segoe UI', sans-serif; padding-bottom: 110px; }
-        
+
         .text-muted { color: var(--rm-text-secondary) !important; }
         .navbar-rm { background-color: var(--rm-surface); padding: 15px 30px; border-bottom: 1px solid #333; }
         .logo-img-nav { max-height: 40px; width: auto; }
@@ -24,7 +24,7 @@
         .track-item { padding: 15px; border-radius: 4px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #2a2a2a; transition: background-color 0.2s; }
         .track-item:last-child { border-bottom: none; }
         .track-item:hover { background-color: #252525; }
-        
+
         .btn-play-track { color: var(--rm-accent); background-color: transparent; border: 2px solid var(--rm-accent); border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s; }
         .btn-play-track:hover { background-color: var(--rm-accent); color: #fff; transform: scale(1.05); }
 
@@ -43,11 +43,11 @@
         .player-track-info { width: 30%; display: flex; align-items: center; gap: 15px; }
         .player-controls { width: 40%; display: flex; flex-direction: column; align-items: center; gap: 8px; }
         .player-side-actions { width: 30%; display: flex; align-items: center; justify-content: flex-end; gap: 15px; color: var(--rm-text-secondary); }
-        
+
         .progress-container { width: 100%; display: flex; align-items: center; gap: 10px; font-size: 0.8rem; color: var(--rm-text-secondary); }
         .progress-bar-bg { flex-grow: 1; height: 4px; background-color: #4f4f4f; border-radius: 2px; position: relative; cursor: pointer; }
         .progress-bar-active { height: 100%; width: 0%; background-color: var(--rm-accent); border-radius: 2px; position: absolute; left: 0; top: 0; }
-        
+
         .btn-player-action { background: none; border: none; color: #b3b3b3; font-size: 1.1rem; transition: color 0.2s, transform 0.2s; }
         .btn-player-action:hover { color: #fff; transform: scale(1.05); }
         .btn-player-main { color: #fff; font-size: 2rem; line-height: 1; }
@@ -67,14 +67,14 @@
 
         #search-songs-input.rm-input:focus {
             border-color: var(--rm-accent) !important;
-}
+        }
     </style>
 </head>
 <body>
     <nav class="navbar navbar-rm d-flex justify-content-between align-items-center">
         <a href="#" style="text-decoration: none !important;"><img src="{% static 'images/Logo.png' %}" alt="RollsMusic" class="logo-img-nav"> <span class="fs-4 fw-bold text-white ms-2">RollsMusic</span></a>
         <div class="d-flex align-items-center gap-3">
-            <span class="fw-bold">Hola, {{ request.session.usuario_nombre }}</span>
+            <span class="fw-bold">Hola, {{ request.session.nombre }}</span>
             <a class="btn btn-outline-light btn-sm rounded-pill px-3" href="{% url 'logout' %}">Cerrar Sesión</a>
         </div>
     </nav>
@@ -90,7 +90,7 @@
             {% endfor %}
         {% endif %}
 
-        <div class="plan-banner premium d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
+        <div class="plan-banner {% if plan_info.plan_nombre == 'Premium' %}premium{% endif %} d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
             <div>
                 <div class="plan-title">Tu Cuenta</div>
                 <h2 class="fw-bold mb-0">Plan {{ plan_info.plan_nombre }}</h2>
@@ -102,7 +102,7 @@
                         <i class="bi bi-hd-fill fs-4 me-2"></i>Audio Dolby Activo
                     </span>
                 {% else %}
-                    <a href="{% url 'procesar_pago' %}" class="btn fw-bold px-4 py-2 rounded-pill text-white shadow-sm" 
+                    <a href="{% url 'procesar_pago' %}" class="btn fw-bold px-4 py-2 rounded-pill text-white shadow-sm"
                        style="background-color: var(--rm-accent); transition: transform 0.2s, background-color 0.2s; text-decoration: none;"
                        onmouseover="this.style.transform='scale(1.04)';" onmouseout="this.style.transform='scale(1)';">
                         <i class="bi bi-lightning-charge-fill me-1"></i>Mejorar a Premium (Audio Dolby)
@@ -138,108 +138,56 @@
             </div>
 
             <div class="col-xl-4 col-lg-7 mb-4">
-
-    <h3 class="section-title">
-        <span>
-            <i class="bi bi-magic me-2" style="color: var(--rm-accent);"></i>
-            Especialmente para ti
-        </span>
-    </h3>
-
-    <div class="track-list-container">
-
-        {% for rec in recomendaciones %}
-        <div class="track-item"
-             data-id="{{ rec.idCancion }}"
-             data-titulo="{{ rec.Cancion }}"
-             data-artista="{{ rec.Artista }}">
-
-            <div class="d-flex align-items-center gap-3">
-
-                <!-- 🔥 FIX: imagen recomendación -->
-                {% if rec.imagen %}
-                    <img src="/media/{{ rec.imagen }}"
-                         class="song-img"
-                         style="width:45px;height:45px;object-fit:cover;border-radius:6px;border:1px solid #444;">
-                {% else %}
-                    <i class="bi bi-music-note fs-4 text-secondary"></i>
-                {% endif %}
-
-                <div>
-                    <h6 class="mb-0 fw-bold text-white">{{ rec.Cancion }}</h6>
-                    <small class="text-muted fw-bold">{{ rec.Artista }}</small>
-                </div>
-
-            </div>
-
-            <div class="btn-play-track" onclick="reproducirDesdeInterfaz(this)">
-                <i class="bi bi-play-fill fs-5"></i>
-            </div>
-
-        </div>
-        {% empty %}
-        <div class="text-center py-4 text-muted">
-            No hay recomendaciones disponibles.
-        </div>
-        {% endfor %}
-
-    </div>
-</div>
-
-
-<div class="col-xl-4 col-lg-12 mb-4">
-
-    <h3 class="section-title">
-        <span>
-            <i class="bi bi-graph-up-arrow me-2" style="color: var(--rm-accent);"></i>
-            Lo que más escuchas
-        </span>
-    </h3>
-
-    <div class="track-list-container" id="top-canciones-box">
-
-        {% for cancion in top_canciones %}
-        <div class="track-item"
-             data-id="{% if cancion.idCancion %}{{ cancion.idCancion }}{% elif cancion.id_cancion %}{{ cancion.id_cancion }}{% else %}{{ cancion.id }}{% endif %}"
-             data-titulo="{{ cancion.titulo }}"
-             data-artista="{{ cancion.Artista }}">
-
-            <div class="d-flex align-items-center gap-3">
-
-                <!-- 🔥 FIX: imagen canción si existe -->
-                {% if cancion.imagen %}
-                    <img src="/media/{{ cancion.imagen }}"
-                         class="song-img"
-                         style="width:45px;height:45px;object-fit:cover;border-radius:6px;border:1px solid #444;">
-                {% else %}
-                    <div class="fw-bold fs-5 text-muted"
-                         style="width: 25px; text-align: right; margin-right: 5px;">
-                        {{ forloop.counter }}
+                <h3 class="section-title"><span><i class="bi bi-magic me-2" style="color: var(--rm-accent);"></i>Especialmente para ti</span></h3>
+                <div class="track-list-container">
+                    {% for rec in recomendaciones %}
+                    <div class="track-item" data-id="{{ rec.idCancion }}" data-titulo="{{ rec.titulo }}" data-artista="{{ rec.artista_nombre }}">
+                        <div class="d-flex align-items-center gap-3">
+                            <div class="p-2 border border-secondary rounded" style="background-color: #333;"><i class="bi bi-star-fill text-warning fs-5"></i></div>
+                            <div>
+                                <h6 class="mb-0 fw-bold text-white">{{ rec.titulo }}</h6>
+                                <small class="text-muted fw-bold">{{ rec.artista_nombre }} • {{ rec.duracion }} min</small>
+                            </div>
+                        </div>
+                        <div class="d-flex align-items-center gap-3">
+                            <span class="badge bg-dark border text-success d-none d-sm-block">{{ rec.calidadAudio }}</span>
+                            <div class="btn-play-track" onclick="reproducirDesdeInterfaz(this)"><i class="bi bi-play-fill fs-5"></i></div>
+                        </div>
                     </div>
-                {% endif %}
-
-                <div>
-                    <h6 class="mb-0 fw-bold text-white">{{ cancion.titulo }}</h6>
-                    <small class="text-muted fw-bold">
-                        {{ cancion.Artista }} • {{ cancion.Album }}
-                    </small>
+                    {% empty %}
+                    <div class="text-center py-4 text-muted">No hay recomendaciones disponibles.</div>
+                    {% endfor %}
                 </div>
-
             </div>
 
-            <div class="btn-play-track" onclick="reproducirDesdeInterfaz(this)">
-                <i class="bi bi-play-fill fs-5"></i>
+            <div class="col-xl-4 col-lg-12 mb-4">
+                <h3 class="section-title"><span><i class="bi bi-graph-up-arrow me-2" style="color: var(--rm-accent);"></i>Lo que más escuchas</span></h3>
+                <div class="track-list-container" id="top-canciones-box">
+                    {% for cancion in top_canciones %}
+                    <div class="track-item"
+                         data-id="{% if cancion.idCancion %}{{ cancion.idCancion }}{% elif cancion.id_cancion %}{{ cancion.id_cancion }}{% else %}{{ cancion.id }}{% endif %}"
+                         data-titulo="{{ cancion.titulo }}"
+                         data-artista="{{ cancion.Artista }}">
+                        <div class="d-flex align-items-center gap-3">
+                            {% if cancion.imagen %}
+                                <img src="/media/{{ cancion.imagen }}"
+                                     class="song-img"
+                                     style="width:45px;height:45px;object-fit:cover;border-radius:6px;border:1px solid #444;">
+                            {% else %}
+                                <div class="fw-bold fs-5 text-muted" style="width: 25px; text-align: right; margin-right: 5px;">{{ forloop.counter }}</div>
+                            {% endif %}
+                            <div>
+                                <h6 class="mb-0 fw-bold text-white">{{ cancion.titulo }}</h6>
+                                <small class="text-muted fw-bold">{{ cancion.Artista }} • {{ cancion.Album }}</small>
+                            </div>
+                        </div>
+                        <div class="btn-play-track" onclick="reproducirDesdeInterfaz(this)"><i class="bi bi-play-fill fs-5"></i></div>
+                    </div>
+                    {% empty %}
+                    <div class="text-center py-4 text-muted">Aún no tienes reproducciones registradas.</div>
+                    {% endfor %}
+                </div>
             </div>
-
-        </div>
-        {% empty %}
-        <div class="text-center py-4 text-muted">
-            Aún no tienes reproducciones registradas.
-        </div>
-        {% endfor %}
-
-    </div>
-</div>
         </div>
     </div>
 
@@ -337,29 +285,24 @@
         let estaReproduciendo = false;
         let playlistActivaID = null;
 
-        // AUTO-OPEN: Si se acaba de crear una playlist, se dispara su editor al cargar la página
         document.addEventListener("DOMContentLoaded", function() {
             mapearCola();
-            
-            // CORRECCIÓN AQUÍ: Se cambió 'default_none' por 'default_if_none'
             const autoOpenID = "{{ auto_open_playlist_id|default_if_none:'' }}";
-            
+
             if(autoOpenID && autoOpenID !== "None" && autoOpenID !== "") {
                 abrirGestionPlaylist(autoOpenID, "Tu Nueva Lista");
             }
         });
 
-        // FUNCIÓN CORE: Carga asíncrona (AJAX) del Split-View interno del Modal
         function abrirGestionPlaylist(id_playlist, nombre_playlist) {
             playlistActivaID = id_playlist;
             document.getElementById("gestion-title-label").innerHTML = `📁 Gestionar Playlist: <span class="text-info">${nombre_playlist}</span>`;
             document.getElementById("search-songs-input").value = "";
-            
+
             fetch(`/playlist/detalles/${id_playlist}/`)
                 .then(res => res.json())
                 .then(data => {
                     if(data.status === 'success') {
-                        // A. Renderizar canciones actuales (Izquierda)
                         const containerActuales = document.getElementById("box-pistas-actuales");
                         containerActuales.innerHTML = "";
                         if(data.guardadas.length === 0) {
@@ -373,23 +316,18 @@
                             });
                         }
 
-                        // B. Renderizar catálogo global para adición (Derecha)
                         const containerDisponibles = document.getElementById("box-pistas-disponibles");
                         containerDisponibles.innerHTML = "";
                         data.disponibles.forEach(pista => {
                             containerDisponibles.innerHTML += `
                                 <div class="p-2 mb-1 border-bottom border-secondary d-flex justify-content-between align-items-center discrete-song-row" data-search-title="${pista.titulo.toLowerCase()}">
                                     <span class="small text-white-50">${pista.titulo}</span>
-                                    <button class="btn btn-sm btn-info py-0 px-2 fw-bold text-white" onclick="inyectarCancionAPlaylist(${pista.id})"><i class="bi bi-plus-lg"></i></button>
+                                    <button class="btn btn-sm btn-info py-0 px-2 fw-bold text-white" onclick="inyectarCancionAPlaylist('${pista.id}')"><i class="bi bi-plus-lg"></i></button>
                                 </div>`;
                         });
 
-                        // ====== LÍNEA NUEVA PARA ELIMINACIÓN ======
-                        // Asignar el ID correcto de MongoDB al formulario de eliminar
                         document.getElementById('formEliminarPlaylist').action = `/playlist/eliminar/${data.id_playlist}/`;
-                        // ==========================================
 
-                        // Desplegar ventana modal de forma limpia
                         const myModal = new bootstrap.Modal(document.getElementById('modalGestionPlaylist'));
                         myModal.show();
                     } else {
@@ -398,15 +336,12 @@
                 }).catch(() => mostrarError("Imposible procesar los metadatos de la playlist."));
         }
 
-
-        // ACCIÓN ASÍNCRONA (+): Agrega pista a la tabla relacional sin parpadear la pantalla
         function inyectarCancionAPlaylist(id_cancion) {
             if(!playlistActivaID) return;
             fetch(`/playlist/agregar/${playlistActivaID}/${id_cancion}/`)
                 .then(res => res.json())
                 .then(data => {
                     if(data.status === 'success') {
-                        // Re-renderizado veloz en segundo plano para dar feedback inmediato (Don Norman)
                         fetch(`/playlist/detalles/${playlistActivaID}/`)
                             .then(r => r.json())
                             .then(freshData => {
@@ -425,7 +360,6 @@
                 });
         }
 
-        // BUSCADOR EN TIEMPO REAL (Filtro del lado derecho)
         function filtrarCatalogoPlaylist() {
             const lookUp = document.getElementById("search-songs-input").value.toLowerCase();
             document.querySelectorAll(".discrete-song-row").forEach(row => {
@@ -434,7 +368,7 @@
             });
         }
 
-        // --- SISTEMA DEL REPRODUCTOR (Se mantiene estable) ---
+        // --- SISTEMA DEL REPRODUCTOR MIGRADO A MONGODB ---
         function mapearCola() {
             colaReproduccion = [];
             document.querySelectorAll(".track-item[data-id]").forEach(item => {
@@ -455,15 +389,18 @@
         }
         function cargarYReproducirPista(pista) {
             if (!pista) return;
+            // 🌟 Simulamos la recarga al tocar para activar el cronómetro, pero también registramos la canción en el backend (PyMongo)
             fetch(`/cancion/reproducir/${pista.id}/`)
                 .then(res => res.json())
                 .then(data => {
                     if (data.status === 'success') {
-                        document.getElementById("player-title").innerText = data.titulo;
+                        document.getElementById("player-title").innerText = pista.titulo;
                         document.getElementById("player-artist").innerText = pista.artista;
-                        duracionTotal = data.duracion;
+                        duracionTotal = 180; // Tiempo simulado por la prueba visual
                         document.getElementById("player-time-total").innerText = formatearTiempo(duracionTotal);
                         reiniciarCronometro(); iniciarCronometro();
+                    } else {
+                        mostrarError("Para reproducir, tu cuenta debe estar Activa.");
                     }
                 });
         }
