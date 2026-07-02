@@ -138,124 +138,113 @@
             </div>
 
             <div class="col-xl-4 col-lg-7 mb-4">
-                            <h3 class="section-title"><span><i class="bi bi-magic me-2" style="color: var(--rm-accent);"></i>Especialmente para ti</span></h3>
-                            <div class="track-list-container">
-                                {% for rec in recomendaciones %}
-                                <div class="track-item" data-id="{{ rec.idCancion }}" data-titulo="{{ rec.titulo }}" data-artista="{{ rec.artista_nombre }}">
-                                    <div class="d-flex align-items-center gap-3">
-                                        {% if rec.imagen %}
-                                            <img src="/media/{{ rec.imagen }}" class="song-img" style="width:45px;height:45px;object-fit:cover;border-radius:6px;border:1px solid #444;">
-                                        {% else %}
-                                            <div class="p-2 border border-secondary rounded" style="background-color: #333;"><i class="bi bi-star-fill text-warning fs-5"></i></div>
-                                        {% endif %}
-                                        <div>
-                                            <h6 class="mb-0 fw-bold text-white">{{ rec.titulo }}</h6>
-                                            <small class="text-muted fw-bold">{{ rec.artista_nombre }} • {{ rec.duracion }} min</small>
-                                        </div>
-                                    </div>
-                                    <div class="d-flex align-items-center gap-3">
-                                        <span class="badge bg-dark border text-success d-none d-sm-block">{{ rec.calidadAudio }}</span>
-                                        <div class="btn-play-track" onclick="reproducirDesdeInterfaz(this)"><i class="bi bi-play-fill fs-5"></i></div>
-                                    </div>
-                                </div>
-                                {% empty %}
-                                <div class="text-center py-4 text-muted">No hay recomendaciones disponibles.</div>
-                                {% endfor %}
+                <h3 class="section-title"><span><i class="bi bi-magic me-2" style="color: var(--rm-accent);"></i>Especialmente para ti</span></h3>
+                <div class="track-list-container">
+                    {% for rec in recomendaciones %}
+                    <div class="track-item" data-id="{{ rec.idCancion }}" data-titulo="{{ rec.titulo }}" data-artista="{{ rec.artista_nombre }}">
+                        <div class="d-flex align-items-center gap-3">
+                            {% if rec.imagen %}
+                                <img src="/media/{{ rec.imagen }}" class="song-img" style="width:45px;height:45px;object-fit:cover;border-radius:6px;border:1px solid #444;">
+                            {% else %}
+                                <div class="p-2 border border-secondary rounded" style="background-color: #333;"><i class="bi bi-star-fill text-warning fs-5"></i></div>
+                            {% endif %}
+                            <div>
+                                <h6 class="mb-0 fw-bold text-white">{{ rec.titulo }}</h6>
+                                <small class="text-muted fw-bold">{{ rec.artista_nombre }} • {{ rec.duracion }} min</small>
                             </div>
                         </div>
+                        <div class="d-flex align-items-center gap-3">
+                            <span class="badge bg-dark border text-success d-none d-sm-block">{{ rec.calidadAudio }}</span>
+                            <div class="btn-play-track" onclick="reproducirDesdeInterfaz(this)"><i class="bi bi-play-fill fs-5"></i></div>
+                        </div>
+                    </div>
+                    {% empty %}
+                    <div class="text-center py-4 text-muted">No hay recomendaciones disponibles.</div>
+                    {% endfor %}
+                </div>
+            </div>
 
-                        <div class="col-xl-4 col-lg-12 mb-4">
-                            <h3 class="section-title"><span><i class="bi bi-graph-up-arrow me-2" style="color: var(--rm-accent);"></i>Lo que más escuchas</span></h3>
-                            <div class="track-list-container" id="top-canciones-box">
-                                {% for cancion in top_canciones %}
-                                <div class="track-item" data-id="{{ cancion.idCancion }}" data-titulo="{{ cancion.titulo }}" data-artista="{{ cancion.artista_nombre }}">
-                                    <div class="d-flex align-items-center gap-3">
-                                        <div class="fw-bold fs-5 text-muted" style="width: 25px; text-align: right; margin-right: 5px;">{{ forloop.counter }}</div>
-                                        {% if cancion.imagen %}
-                                            <img src="/media/{{ cancion.imagen }}" class="song-img" style="width:45px;height:45px;object-fit:cover;border-radius:6px;border:1px solid #444;">
-                                        {% else %}
-                                            <div class="p-2 border border-secondary rounded" style="background-color: #2a2a2a;"><i class="bi bi-music-note fs-5 text-secondary"></i></div>
-                                        {% endif %}
-                                        <div>
-                                            <h6 class="mb-0 fw-bold text-white">{{ cancion.titulo }}</h6>
-                                            <small class="text-muted fw-bold">{{ cancion.artista_nombre }} • {{ cancion.duracion }} min</small>
-                                        </div>
-                                    </div>
-                                    <div class="d-flex align-items-center gap-3">
-                                        <span class="badge bg-dark border text-info d-none d-sm-block">{{ cancion.calidadAudio }}</span>
-                                        <div class="btn-play-track" onclick="reproducirDesdeInterfaz(this)"><i class="bi bi-play-fill fs-5"></i></div>
-                                    </div>
-                                </div>
-                                {% empty %}
-                                <div class="text-center py-4 text-muted">Aún no tienes reproducciones registradas.</div>
-                                {% endfor %}
+            <div class="col-xl-4 col-lg-12 mb-4">
+                <h3 class="section-title"><span><i class="bi bi-graph-up-arrow me-2" style="color: var(--rm-accent);"></i>Lo que más escuchas</span></h3>
+                <div class="track-list-container" id="top-canciones-box">
+                    {% for cancion in top_canciones %}
+                    <div class="track-item" data-id="{{ cancion.idCancion }}" data-titulo="{{ cancion.titulo }}" data-artista="{{ cancion.artista_nombre }}">
+                        <div class="d-flex align-items-center gap-3">
+                            <div class="fw-bold fs-5 text-muted" style="width: 25px; text-align: right; margin-right: 5px;">{{ forloop.counter }}</div>
+                            {% if cancion.imagen %}
+                                <img src="/media/{{ cancion.imagen }}" class="song-img" style="width:45px;height:45px;object-fit:cover;border-radius:6px;border:1px solid #444;">
+                            {% else %}
+                                <div class="p-2 border border-secondary rounded" style="background-color: #2a2a2a;"><i class="bi bi-music-note fs-5 text-secondary"></i></div>
+                            {% endif %}
+                            <div>
+                                <h6 class="mb-0 fw-bold text-white">{{ cancion.titulo }}</h6>
+                                <small class="text-muted fw-bold">{{ cancion.artista_nombre }} • {{ cancion.duracion }} min</small>
                             </div>
+                        </div>
+                        <div class="d-flex align-items-center gap-3">
+                            <span class="badge bg-dark border text-info d-none d-sm-block">{{ cancion.calidadAudio }}</span>
+                            <div class="btn-play-track" onclick="reproducirDesdeInterfaz(this)"><i class="bi bi-play-fill fs-5"></i></div>
+                        </div>
+                    </div>
+                    {% empty %}
+                    <div class="text-center py-4 text-muted">Aún no tienes reproducciones registradas.</div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="col-xl-4 col-lg-12 mb-4">
+
+                <h3 class="section-title">
+                    <span>
+                        <i class="bi bi-graph-up-arrow me-2" style="color: var(--rm-accent);"></i>
+                        Lo que más escuchas
+                    </span>
+                </h3>
+
+                <div class="track-list-container" id="top-canciones-box">
+
+                    {% for cancion in top_canciones %}
+                    <div class="track-item"
+                        data-id="{% if cancion.idCancion %}{{ cancion.idCancion }}{% elif cancion.id_cancion %}{{ cancion.id_cancion }}{% else %}{{ cancion.id }}{% endif %}"
+                        data-titulo="{{ cancion.titulo }}"
+                        data-artista="{{ cancion.Artista }}">
+
+                        <div class="d-flex align-items-center gap-3">
+
+                            <!-- 🔥 FIX: imagen canción si existe -->
+                            {% if cancion.imagen %}
+                                <img src="/media/{{ cancion.imagen }}"
+                                    class="song-img"
+                                    style="width:45px;height:45px;object-fit:cover;border-radius:6px;border:1px solid #444;">
+                            {% else %}
+                                <div class="fw-bold fs-5 text-muted"
+                                    style="width: 25px; text-align: right; margin-right: 5px;">
+                                    {{ forloop.counter }}
+                                </div>
+                            {% endif %}
+
+                            <div>
+                                <h6 class="mb-0 fw-bold text-white">{{ cancion.titulo }}</h6>
+                                <small class="text-muted fw-bold">
+                                    {{ cancion.Artista }} • {{ cancion.Album }}
+                                </small>
+                            </div>
+
+                        </div>
+
+                        <div class="btn-play-track" onclick="reproducirDesdeInterfaz(this)">
+                            <i class="bi bi-play-fill fs-5"></i>
                         </div>
 
                     </div>
                     {% empty %}
                     <div class="text-center py-4 text-muted">
-                        No hay recomendaciones disponibles.
+                        Aún no tienes reproducciones registradas.
                     </div>
                     {% endfor %}
 
                 </div>
             </div>
-
-
-<div class="col-xl-4 col-lg-12 mb-4">
-
-    <h3 class="section-title">
-        <span>
-            <i class="bi bi-graph-up-arrow me-2" style="color: var(--rm-accent);"></i>
-            Lo que más escuchas
-        </span>
-    </h3>
-
-    <div class="track-list-container" id="top-canciones-box">
-
-        {% for cancion in top_canciones %}
-        <div class="track-item"
-             data-id="{% if cancion.idCancion %}{{ cancion.idCancion }}{% elif cancion.id_cancion %}{{ cancion.id_cancion }}{% else %}{{ cancion.id }}{% endif %}"
-             data-titulo="{{ cancion.titulo }}"
-             data-artista="{{ cancion.Artista }}">
-
-            <div class="d-flex align-items-center gap-3">
-
-                <!-- 🔥 FIX: imagen canción si existe -->
-                {% if cancion.imagen %}
-                    <img src="/media/{{ cancion.imagen }}"
-                         class="song-img"
-                         style="width:45px;height:45px;object-fit:cover;border-radius:6px;border:1px solid #444;">
-                {% else %}
-                    <div class="fw-bold fs-5 text-muted"
-                         style="width: 25px; text-align: right; margin-right: 5px;">
-                        {{ forloop.counter }}
-                    </div>
-                {% endif %}
-
-                <div>
-                    <h6 class="mb-0 fw-bold text-white">{{ cancion.titulo }}</h6>
-                    <small class="text-muted fw-bold">
-                        {{ cancion.Artista }} • {{ cancion.Album }}
-                    </small>
-                </div>
-
-            </div>
-
-            <div class="btn-play-track" onclick="reproducirDesdeInterfaz(this)">
-                <i class="bi bi-play-fill fs-5"></i>
-            </div>
-
-        </div>
-        {% empty %}
-        <div class="text-center py-4 text-muted">
-            Aún no tienes reproducciones registradas.
-        </div>
-        {% endfor %}
-
-    </div>
-</div>
         </div>
     </div>
 
