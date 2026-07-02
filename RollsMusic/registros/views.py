@@ -765,81 +765,149 @@ def dashboard_usuario(request):
     usuario_id = request.session.get('usuario_id')
     if not usuario_id:
         return redirect('login')
-        
-    top_canciones, playlists_usuario = [], []
+
+    top_canciones = []
+    playlists_usuario = []
     auto_open_id = request.session.pop('auto_open_playlist_id', None)
-    
-    with connection.cursor() as cursor:
-        try:
-            # Lista "Lo que más escuchas" siempre actualizada (Se mantiene consumiendo de SQL Server)
-            cursor.execute("EXEC Reportes.sp_TopCancionesUsuario %s", [usuario_id])
-            columns_top = [col[0] for col in cursor.description]
-            top_canciones = [dict(zip(columns_top, row)) for row in cursor.fetchall()]
-        except Exception:
-            pass
 
     # ========================================================
-    # LECTURA MONGODB: Traer las playlists del usuario (READ)
+    # TOP CANCIONES
     # ========================================================
-    try:
-        # Buscamos en MongoDB todas las playlists vinculadas a este usuario
-        playlists_mongo = db.playlists.find({"idUsuarioSQL": usuario_id})
-        
-        # Recorremos los resultados y los agregamos a la lista que irá al HTML
-        for p in playlists_mongo:
-            playlists_usuario.append((str(p['_id']), p.get('nombre', 'Sin nombre')))
-    except Exception as e:
-        print(f"Error al leer Playlists de Mongo: {e}")
-    # ========================================================
-
-    # Memoria de Sesión Completa para congelar la lista "Especialmente para ti"
-    recomendaciones = request.session.get('recomendaciones_cache')
-    if not recomendaciones:
-        recomendaciones = []
-        with connection.cursor() as cursor:
-            try:
-                cursor.execute("EXEC Reportes.sp_RecomendacionesPersonalizadas %s", [usuario_id])
-                columns_rec = [col[0] for col in cursor.description]
-                raw_recs = [dict(zip(columns_rec, row)) for row in cursor.fetchall()]
-                
-                for r in raw_recs:
-                    id_can = r.get('idCancion') or r.get('id_cancion') or r.get('id')
-                    tit_can = r.get('Cancion') or r.get('titulo')
-                    art_can = r.get('Artista') or r.get('nombreArtistico') or r.get('nombre')
-                    alb_can = r.get('Album') or r.get('album_titulo') or 'Sencillo'
-                    
-                    if id_can:
-                        recomendaciones.append({
-                            'idCancion': id_can, 'Cancion': tit_can, 'Artista': art_can, 'Album': alb_can
-                        })
-                request.session['recomendaciones_cache'] = recomendaciones
-            except Exception:
-                recomendaciones = []
-
-    plan_info = {'plan_nombre': 'Free', 'suscripcion_estado': 'Activa'}  # Plan base por defecto si no tiene registro
     with connection.cursor() as cursor:
         try:
             cursor.execute("""
-                SELECT TOP 1 P.nombre, S.estado 
+                SELECT 
+                    C.idCancion,
+                    C.titulo,
+                    C.imagen,
+                    C.duracion,
+                    C.numeroPista,
+                    A.titulo AS album,
+                    C.calidadAudio
+                FROM Usuarios.Reproduccion R
+                INNER JOIN Catalogo.Cancion C 
+                    ON R.Cancion_idCancion = C.idCancion
+                INNER JOIN Catalogo.Album A 
+                    ON C.Album_idAlbum = A.idAlbum
+                WHERE R.Usuario_idUsuario = %s
+            """, [usuario_id])
+            
+            for row in cursor.fetchall():
+                top_canciones.append({
+                    "idCancion": row[0],
+                    "Cancion": row[1],
+                    "imagen": row[2],
+                    "duracion": row[3],
+                    "numeroPista": row[4],
+                    "Album": row[5]
+                })
+
+        except Exception as e:
+            print(f"Error top_canciones: {e}")
+            top_canciones = []
+
+    # ========================================================
+    # PLAYLISTS (MONGODB)
+    # ========================================================
+    try:
+        playlists_mongo = db.playlists.find({"idUsuarioSQL": usuario_id})
+
+        for p in playlists_mongo:
+            playlists_usuario.append(
+                (str(p['_id']), p.get('nombre', 'Sin nombre'))
+            )
+
+    except Exception as e:
+        print(f"Error al leer Playlists de Mongo: {e}")
+
+    # ========================================================
+    # RECOMENDACIONES (FIX DEFINITIVO)
+    # ========================================================
+    recomendaciones = []
+
+    with connection.cursor() as cursor:
+        try:
+            cursor.execute(
+                "EXEC Reportes.sp_RecomendacionesPersonalizadas %s",
+                [usuario_id]
+            )
+
+            columns_rec = [col[0] for col in cursor.description]
+            raw_recs = [
+                dict(zip(columns_rec, row))
+                for row in cursor.fetchall()
+            ]
+
+            for r in raw_recs:
+                id_can = r.get('idCancion') or r.get('id_cancion') or r.get('id')
+                tit_can = r.get('Cancion') or r.get('titulo')
+                art_can = r.get('Artista') or r.get('nombreArtistico') or r.get('nombre')
+                alb_can = r.get('Album') or r.get('album_titulo') or 'Sencillo'
+
+                if id_can:
+                    cursor.execute("""
+                        SELECT imagen
+                        FROM Catalogo.Cancion
+                        WHERE idCancion = %s
+                    """, [id_can])
+
+                    img_row = cursor.fetchone()
+
+                    recomendaciones.append({
+                        'idCancion': id_can,
+                        'Cancion': tit_can,
+                        'Artista': art_can,
+                        'Album': alb_can,
+                        'imagen': img_row[0] if img_row else None
+                    })
+
+        except Exception as e:
+            print(f"Error recomendaciones: {e}")
+            recomendaciones = []
+
+    # ========================================================
+    # PLAN USUARIO
+    # ========================================================
+    plan_info = {
+        'plan_nombre': 'Free',
+        'suscripcion_estado': 'Activa'
+    }
+
+    with connection.cursor() as cursor:
+        try:
+            cursor.execute("""
+                SELECT TOP 1 P.nombre, S.estado
                 FROM Facturacion.Suscripcion S
-                INNER JOIN Facturacion.PlanEntity P ON S.PlanEntity_idPlan = P.idPlan
-                WHERE S.Usuario_idUsuario = %s AND S.estado = 'Activa'
+                INNER JOIN Facturacion.PlanEntity P 
+                    ON S.PlanEntity_idPlan = P.idPlan
+                WHERE S.Usuario_idUsuario = %s 
+                  AND S.estado = 'Activa'
                 ORDER BY S.idSuscripcion DESC
             """, [usuario_id])
-            plan_row = cursor.fetchone()
-            if plan_row:
-                plan_info = {'plan_nombre': plan_row[0], 'suscripcion_estado': plan_row[1]}
-        except Exception:
-            pass
 
+            plan_row = cursor.fetchone()
+
+            if plan_row:
+                plan_info = {
+                    'plan_nombre': plan_row[0],
+                    'suscripcion_estado': plan_row[1]
+                }
+
+        except Exception as e:
+            print(f"Error plan_info: {e}")
+
+    # ========================================================
+    # CONTEXT
+    # ========================================================
     context = {
         'top_canciones': top_canciones,
         'recomendaciones': recomendaciones,
-        'plan_info': plan_info,  # <-- Enviamos el plan real extraído de la BD
+        'plan_info': plan_info,
         'playlists': playlists_usuario,
         'auto_open_playlist_id': auto_open_id,
     }
-    return render(request, 'dashboards/usuario.html', context)  
+
+    return render(request, 'dashboards/usuario.html', context)
 
 @verificar_rol(['Artista', 'Admin'])
 def dashboard_artista(request):

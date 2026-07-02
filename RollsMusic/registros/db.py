@@ -2,20 +2,30 @@ import os
 from pymongo import MongoClient
 from dotenv import load_dotenv
 
-# 1. Cargamos las variables ocultas del archivo .env
-load_dotenv()
+# 🔥 SUBIR DOS NIVELES HASTA EL ROOT DEL PROYECTO
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# 2. Obtenemos la URI de forma segura
+PROJECT_ROOT = os.path.abspath(
+    os.path.join(BASE_DIR, "..", "..")
+)
+
+ENV_PATH = os.path.join(PROJECT_ROOT, ".env")
+
+print("DEBUG ENV PATH =", ENV_PATH)
+print("EXISTS =", os.path.exists(ENV_PATH))
+
+load_dotenv(dotenv_path=ENV_PATH)
+
 URI_ATLAS = os.getenv("MONGO_URI")
 
-# 3. Conectamos a Atlas
-try:
-    client = MongoClient(URI_ATLAS)
-    db = client['RollsMusicDB'] 
-    # Opcional: Esto hace un ping rápido para verificar que la conexión es exitosa
-    client.admin.command('ping')
-    print("Conexión a MongoDB Atlas exitosa.")
-except Exception as e:
-    print(f"Error conectando a MongoDB Atlas: {e}")
-    
-## Cambios instanciados
+print("DEBUG URI =", URI_ATLAS)
+
+if not URI_ATLAS:
+    raise Exception("❌ MONGO_URI no se está leyendo del .env")
+
+client = MongoClient(URI_ATLAS, serverSelectionTimeoutMS=5000)
+client.admin.command("ping")
+
+db = client["RollsMusicDB"]
+
+print("✔ MongoDB Atlas conectado correctamente")
