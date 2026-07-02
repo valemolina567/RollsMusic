@@ -219,11 +219,14 @@
                 {% endif %}
 
                 <div>
-                    <h6 class="mb-0 fw-bold text-white">{{ cancion.titulo }}</h6>
-                    <small class="text-muted fw-bold">
-                        {{ cancion.Artista }} • {{ cancion.Album }}
-                    </small>
-                </div>
+    <h6 class="mb-0 fw-bold text-white">
+        {{ cancion.Cancion }}
+    </h6>
+
+    <small class="text-muted fw-bold d-block">
+        {{ cancion.Artista }}
+    </small>
+</div>
 
             </div>
 
@@ -325,7 +328,13 @@
                 <span id="player-time-total">0:00</span>
             </div>
         </div>
-        <div class="player-side-actions d-none d-md-flex"><i class="bi bi-volume-up"></i><div style="width: 90px; height: 4px; background-color: #555; border-radius: 2px; position:relative;"><div style="width: 70%; height:100%; background-color:#fff; border-radius:2px;"></div></div></div>
+        <div class="player-side-actions d-none d-md-flex"><i class="bi bi-volume-up"></i><input type="range"
+       id="volume-control"
+       min="0"
+       max="1"
+       step="0.01"
+       value="0.7"
+       style="width: 100px; accent-color: var(--rm-accent);"></div>
     </div>
 
     <script>
@@ -436,16 +445,23 @@
 
         // --- SISTEMA DEL REPRODUCTOR (Se mantiene estable) ---
         function mapearCola() {
-            colaReproduccion = [];
-            document.querySelectorAll(".track-item[data-id]").forEach(item => {
-                const idTrack = item.getAttribute("data-id");
-                if(idTrack && idTrack !== "None" && idTrack !== "") {
-                    if(!colaReproduccion.some(t => t.id === idTrack)) {
-                        colaReproduccion.push({ id: idTrack, titulo: item.getAttribute("data-titulo"), artista: item.getAttribute("data-artista") });
-                    }
-                }
-            });
+    colaReproduccion = [];
+
+    document.querySelectorAll(".track-item[data-id]").forEach(item => {
+        const idTrack = item.getAttribute("data-id");
+
+        if (idTrack && idTrack !== "None" && idTrack !== "") {
+            if (!colaReproduccion.some(t => t.id === idTrack)) {
+                colaReproduccion.push({
+                    id: idTrack,
+                    titulo: item.getAttribute("data-titulo"),
+                    artista: item.getAttribute("data-artista"),
+                    imagen: item.getAttribute("data-imagen") // 🔥 FIX
+                });
+            }
         }
+    });
+}
         function reproducirDesdeInterfaz(elemento) {
             const trackItem = elemento.closest(".track-item");
             const id = trackItem.getAttribute("data-id");
@@ -454,19 +470,32 @@
             if(indiceActual !== -1) { cargarYReproducirPista(colaReproduccion[indiceActual]); }
         }
         function cargarYReproducirPista(pista) {
-            if (!pista) return;
-            fetch(`/cancion/reproducir/${pista.id}/`)
-                .then(res => res.json())
-                .then(data => {
-                    if (data.status === 'success') {
-                        document.getElementById("player-title").innerText = data.titulo;
-                        document.getElementById("player-artist").innerText = pista.artista;
-                        duracionTotal = data.duracion;
-                        document.getElementById("player-time-total").innerText = formatearTiempo(duracionTotal);
-                        reiniciarCronometro(); iniciarCronometro();
-                    }
-                });
-        }
+    if (!pista) return;
+
+    fetch(`/cancion/reproducir/${pista.id}/`)
+        .then(res => res.json())
+        .then(data => {
+            if (data.status === 'success') {
+
+                document.getElementById("player-title").innerText = data.titulo;
+                document.getElementById("player-artist").innerText = data.artista;
+
+                duracionTotal = Number(data.duracion) || 0;
+
+                document.getElementById("player-time-total").innerText =
+                    formatearTiempo(duracionTotal);
+
+                reiniciarCronometro();
+                iniciarCronometro();
+
+                // 🔥 FIX FINAL: usar SIEMPRE backend
+                document.getElementById("player-art").innerHTML =
+                    data.imagen
+                        ? `<img src="/media/${data.imagen}" style="width:55px;height:55px;border-radius:6px;object-fit:cover;">`
+                        : `<i class="bi bi-disc-fill fs-3 text-secondary"></i>`;
+            }
+        });
+}
         function conmutarReproduccion() {
             if (indiceActual === -1 && colaReproduccion.length > 0) { indiceActual = 0; cargarYReproducirPista(colaReproduccion[indiceActual]); return; }
             if (estaReproduciendo) { pausarCronometro(); } else { iniciarCronometro(); }

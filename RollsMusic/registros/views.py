@@ -783,12 +783,15 @@ def dashboard_usuario(request):
                     C.duracion,
                     C.numeroPista,
                     A.titulo AS album,
-                    C.calidadAudio
+                    C.calidadAudio,
+                    AR.nombre AS artista
                 FROM Usuarios.Reproduccion R
                 INNER JOIN Catalogo.Cancion C 
                     ON R.Cancion_idCancion = C.idCancion
                 INNER JOIN Catalogo.Album A 
                     ON C.Album_idAlbum = A.idAlbum
+                INNER JOIN Catalogo.Artista AR
+                    ON A.Artista_idArtista = AR.idArtista
                 WHERE R.Usuario_idUsuario = %s
             """, [usuario_id])
             
@@ -799,7 +802,9 @@ def dashboard_usuario(request):
                     "imagen": row[2],
                     "duracion": row[3],
                     "numeroPista": row[4],
-                    "Album": row[5]
+                    "Album": row[5],
+                    "calidadAudio": row[7],
+                    "Artista": row[7]
                 })
 
         except Exception as e:
@@ -1058,34 +1063,67 @@ def verificar_suscripciones(request):
 @verificar_rol(['Cliente', 'Admin'])
 def registrar_reproduccion(request, id_cancion):
     usuario_id = request.session.get('usuario_id')
-    
+
     try:
-        # REGLA DE NEGOCIO: Validar que el usuario esté 'Activo'
         usuario_mongo = db.usuarios.find_one({"idUsuarioSQL": usuario_id})
-        
+
         if not usuario_mongo:
             return JsonResponse({'status': 'error', 'message': 'Usuario no encontrado en MongoDB.'}, status=404)
-            
-        if usuario_mongo.get('estado') != 'Activo':
-            return JsonResponse({'status': 'error', 'message': 'Operación denegada: Tu cuenta debe estar Activa para reproducir música.'}, status=403)
 
-        # Inserción en MongoDB
-        nueva_reproduccion = {
+        if usuario_mongo.get('estado') != 'Activo':
+            return JsonResponse({'status': 'error', 'message': 'Cuenta no activa.'}, status=403)
+
+        # =========================
+        # REGISTRAR REPRODUCCIÓN
+        # =========================
+        db.reproducciones.insert_one({
             "idUsuarioSQL": usuario_id,
             "idCancionSQL": int(id_cancion),
-            "fechaHora": datetime.now(), 
+            "fechaHora": datetime.now(),
             "dispositivo": "Navegador Web",
-            "pais": "Ecuador", 
-            "duracionEscuchada": 0, 
+            "pais": "Ecuador",
+            "duracionEscuchada": 0,
             "completada": True
-        }
+        })
 
-        db.reproducciones.insert_one(nueva_reproduccion)
-        return JsonResponse({'status': 'success', 'message': 'Reproducción registrada en MongoDB.'})
-        
+        # =========================
+        # TRAER INFO DE LA CANCION (CLAVE)
+        # =========================
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT 
+                    C.titulo,
+                    C.imagen,
+                    C.duracion,
+                    AR.nombre AS artista
+                FROM Catalogo.Cancion C
+                INNER JOIN Catalogo.Album A ON C.Album_idAlbum = A.idAlbum
+                INNER JOIN Catalogo.Artista AR ON A.Artista_idArtista = AR.idArtista
+                WHERE C.idCancion = %s
+            """, [id_cancion])
+
+            row = cursor.fetchone()
+
+        if not row:
+            return JsonResponse({'status': 'error', 'message': 'Canción no encontrada'}, status=404)
+
+        # =========================
+        # RESPUESTA COMPLETA (IMPORTANTE)
+        # =========================
+        return JsonResponse({
+            "status": "success",
+            "titulo": row[0],
+            "imagen": row[1],
+            "duracion": row[2],
+            "artista": row[3]
+        })
+
     except Exception as e:
-        return JsonResponse({'status': 'error', 'message': f'Fallo de BD NoSQL: {str(e)}'}, status=500)
-
+        return JsonResponse({
+            'status': 'error',
+            'message': f'Fallo de BD NoSQL: {str(e)}'
+        }, status=500)
+        
 @verificar_rol(['Artista', 'Admin'])
 def crear_album_artista(request):
     if request.method == 'POST':
