@@ -22,26 +22,53 @@
 
         .table-rm { background-color: var(--rm-surface); border-radius: 8px; color: var(--rm-text-primary); border-collapse: separate; border-spacing: 0; width: 100%; border: 1px solid #333; }
         .table-rm th { color: var(--rm-text-secondary); text-transform: uppercase; font-size: 0.85rem; font-weight: 700; letter-spacing: 1px; padding: 15px; border-bottom: 2px solid #333; }
-        .table-rm td { padding: 15px; border-bottom: 1px solid #2a2a2a; color: #EAEAEA; }
+        .table-rm td { padding: 15px; border-bottom: 1px solid #2a2a2a; color: #EAEAEA; vertical-align: middle; }
         .table-rm tr:last-child td { border-bottom: none; }
         
         .modal-content { background-color: var(--rm-surface); border: 1px solid #444; color: var(--rm-text-primary); }
         .modal-header { border-bottom: 1px solid #333; }
         .modal-footer { border-top: 1px solid #333; }
         .form-label { font-weight: 600; color: var(--rm-text-primary); margin-bottom: 6px; }
-        .rm-input { background-color: transparent; border: 2px solid #444; color: var(--rm-text-primary); padding: 10px; }
-        .rm-input:focus { background-color: transparent; border-color: var(--rm-accent); color: var(--rm-text-primary); box-shadow: none; }
-        .help-text { color: var(--rm-text-secondary); font-size: 0.85rem; margin-top: 4px; }
-        select.rm-input, select.rm-input option { background-color: #252525 !important; color: #FFFFFF !important; }
         
-        /* Estilo para la foto del artista */
-        .artist-profile-img {
-            width: 80px; 
-            height: 80px; 
-            object-fit: cover; 
-            border-radius: 50%; 
-            border: 2px solid var(--rm-accent);
+        /* Inputs corregidos para Modo Oscuro Completamente Visibles */
+        .form-control.rm-input, .form-select.rm-input { 
+            background-color: #252525 !important; 
+            border: 1px solid #555 !important; 
+            color: #FFFFFF !important; 
+            padding: 10px;
         }
+        .form-control.rm-input:focus, .form-select.rm-input:focus { 
+            background-color: #2A2A2A !important; 
+            border-color: var(--rm-accent) !important; 
+            color: #FFFFFF !important; 
+            box-shadow: 0 0 0 0.2rem rgba(0, 174, 239, 0.25) !important;
+        }
+        .form-control.rm-input::placeholder { color: #AAAAAA !important; }
+        .help-text { color: var(--rm-text-secondary); font-size: 0.85rem; margin-top: 4px; }
+        
+        .artist-profile-img { width: 80px; height: 80px; object-fit: cover; border-radius: 50%; border: 2px solid var(--rm-accent); }
+        .album-cover-table { width: 45px; height: 45px; object-fit: cover; border-radius: 6px; border: 1px solid #444; }
+        
+        /* Efecto Hover Fila Álbum */
+        .album-row-clickable { transition: background-color 0.2s; cursor: pointer; }
+        .album-row-clickable:hover { background-color: #252525; }
+        
+        /* DISEÑO DE TRACKLIST MODERNO Y FLUIDO (REEMPLAZA LA RIGIDEZ DE LA TABLA) */
+        .inner-songs-container { background-color: #141414; border-radius: 8px; padding: 20px; border: 1px solid #282828; }
+        
+        .track-row { 
+            background-color: rgba(255, 255, 255, 0.01); 
+            border: 1px solid rgba(255, 255, 255, 0.03); 
+            border-radius: 6px;
+            transition: all 0.25s ease-in-out;
+        }
+        .track-row:hover { 
+            background-color: rgba(255, 255, 255, 0.05); 
+            border-color: rgba(0, 174, 239, 0.25); 
+            transform: translateX(4px); 
+        }
+        .track-actions-btn { opacity: 0.6; transition: opacity 0.2s, transform 0.2s; font-size: 1.15rem; }
+        .track-actions-btn:hover { opacity: 1; transform: scale(1.15); }
     </style>
 </head>
 <body>
@@ -69,22 +96,10 @@
         <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-5 p-4 border border-secondary rounded gap-3" style="background-color: var(--rm-surface);">
             <div class="d-flex align-items-center">
                 <img src="{{ artista.imagen_url }}" alt="Foto de {{ artista.nombreArtistico }}" class="artist-profile-img me-4 shadow">
-                
                 <div>
-                    {% if artista.verificado %}
-                        <span class="badge bg-info text-dark mb-1"><i class="bi bi-patch-check-fill me-1"></i>Perfil Verificado</span>
-                    {% endif %}
                     <h1 class="h2 fw-bold mb-0">{{ artista.nombreArtistico }}</h1>
                     <div class="text-muted small mt-1"><i class="bi bi-geo-alt-fill"></i> {{ artista.pais }} • {{ artista.genero }}</div>
                 </div>
-            </div>
-            <div class="d-flex gap-2">
-                <button class="btn btn-outline-light fw-bold px-3 py-2" data-bs-toggle="modal" data-bs-target="#modalAlbum">
-                    <i class="bi bi-folder-plus me-1"></i> Crear Álbum
-                </button>
-                <button class="btn px-3 py-2 fw-bold" style="background-color: var(--rm-accent); color: white;" data-bs-toggle="modal" data-bs-target="#modalCancion">
-                    <i class="bi bi-plus-circle-fill me-1"></i> Subir Canción
-                </button>
             </div>
         </div>
 
@@ -109,12 +124,13 @@
             </div>
         </div>
 
-        <h3 class="fw-bold mb-3"><i class="bi bi-music-note-list text-info me-2"></i> Tus Canciones Recientes</h3>
-        <div class="table-responsive">
+        <h3 class="fw-bold mb-3"><i class="bi bi-music-note-list text-info me-2"></i> Últimas Pistas Subidas (Línea Temporal)</h3>
+        <div class="table-responsive mb-5">
             <table class="table-rm shadow-sm">
                 <thead>
                     <tr>
                         <th>#</th>
+                        <th>Portada</th>
                         <th>Título de la Canción</th>
                         <th>Duración</th>
                         <th>Calidad</th>
@@ -124,19 +140,265 @@
                     {% for cancion in canciones_recientes %}
                     <tr>
                         <td class="text-muted fw-bold">{{ forloop.counter }}</td>
+                        <td>
+                            {% if cancion.imagen_url %}
+                                <img src="{{ cancion.imagen_url }}" class="album-cover-table shadow-sm">
+                            {% else %}
+                                <img src="{% static 'images/default_track.png' %}" class="album-cover-table shadow-sm">
+                            {% endif %}
+                        </td>
                         <td class="fw-bold text-white"><i class="bi bi-play-fill text-info me-1"></i> {{ cancion.titulo }}</td>
                         <td class="text-muted fw-bold">{{ cancion.duracion_formateada }} min</td>
                         <td>
-                            {% if cancion.calidadAudio == 'Alta' %}
-                                <span class="badge bg-info text-dark fw-bold border">{{ cancion.calidadAudio }}</span>
-                            {% else %}
-                                <span class="badge bg-dark border text-muted">{{ cancion.calidadAudio }}</span>
-                            {% endif %}
+                            <span class="badge bg-info text-dark border">{{ cancion.calidadAudio }}</span>
                         </td>
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="4" class="text-center py-4 text-muted">No tienes canciones registradas. Utiliza el botón superior para subir una.</td>
+                        <td colspan="5" class="text-center py-4 text-muted">No registras tracks todavía en tu historial.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-3 gap-2">
+            <div>
+                <h3 class="fw-bold mb-1"><i class="bi bi-disc text-info me-2"></i> Catálogo de Álbumes</h3>
+                <p class="text-muted small mb-0"><i class="bi bi-info-circle me-1"></i> Haz clic en cualquier fila de álbum para desplegar y gestionar sus canciones internas de forma atómica.</p>
+            </div>
+            <button class="btn fw-bold px-4 py-2 shadow-sm" style="background-color: var(--rm-accent); color: white;" data-bs-toggle="modal" data-bs-target="#modalAlbum">
+                <i class="bi bi-folder-plus me-1"></i> Crear Nuevo Álbum
+            </button>
+        </div>
+        
+        <div class="table-responsive mb-5">
+            <table class="table-rm shadow-sm">
+                <thead>
+                    <tr>
+                        <th>Portada</th>
+                        <th>Título de la Obra</th>
+                        <th>Fecha de Lanzamiento</th>
+                        <th>Acciones de Álbum</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for album in albums_artista %}
+                    <tr class="album-row-clickable" data-bs-toggle="collapse" data-bs-target="#collapseAlbum{{ album.id_mongo }}" aria-expanded="false">
+                        <td>
+                            {% if album.imagen_url %}
+                                <img src="{{ album.imagen_url }}" class="album-cover-table shadow-sm">
+                            {% else %}
+                                <img src="{% static 'images/default_track.png' %}" class="album-cover-table shadow-sm">
+                            {% endif %}
+                        </td>
+                        <td class="fw-bold text-white">
+                            {{ album.titulo }} 
+                            <span class="badge bg-info text-dark ms-2 fw-bold" style="font-size:0.75rem;">{{ album.canciones|length }} tracks <i class="bi bi-chevron-down small ms-1"></i></span>
+                        </td>
+                        <td class="text-muted fw-bold">{{ album.fecha_formateada }}</td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-info me-1" data-bs-toggle="modal" data-bs-target="#modalEditarAlbum{{ album.id_mongo }}" onclick="event.stopPropagation();">
+                                <i class="bi bi-pencil-square"></i>
+                            </button>
+                            <button class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#modalEliminarAlbum{{ album.id_mongo }}" onclick="event.stopPropagation();">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </td>
+                    </tr>
+
+                    <tr class="collapse" id="collapseAlbum{{ album.id_mongo }}">
+                        <td colspan="4" class="p-3" style="background-color: #161616;">
+                            <div class="inner-songs-container shadow-inner">
+                                <div class="d-flex justify-content-between align-items-center mb-4 pb-2 border-bottom border-secondary">
+                                    <h5 class="fw-bold text-white mb-0" style="letter-spacing: 0.5px;">
+                                        <i class="bi bi-music-note-beamed text-info me-2"></i>Pistas en <span class="text-info">"{{ album.titulo }}"</span>
+                                    </h5>
+                                    <button class="btn btn-sm btn-outline-success fw-bold px-3 py-1" data-bs-toggle="modal" data-bs-target="#modalAddTrackDirect{{ album.id_mongo }}">
+                                        <i class="bi bi-plus-circle me-1"></i> Agregar Pista
+                                    </button>
+                                </div>
+
+                                <div class="d-flex flex-column gap-2">
+                                    {% for song in album.canciones %}
+                                    <div class="track-row d-flex justify-content-between align-items-center p-3">
+                                        <div class="d-flex align-items-center flex-grow-1 gap-3">
+                                            <span class="text-muted fw-bold small" style="width:20px;">{{ forloop.counter }}</span>
+                                            <i class="bi bi-play-circle-fill text-info fs-5"></i>
+                                            <div>
+                                                <span class="fw-bold text-white d-block fs-6 mb-1">{{ song.titulo }}</span>
+                                                <span class="badge bg-dark border border-secondary text-muted px-2 py-0.5 small" style="font-size: 0.7rem;">Calidad: {{ song.calidadAudio }}</span>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="d-flex align-items-center gap-4">
+                                            <span class="text-muted small fw-bold"><i class="bi bi-clock me-1"></i>{{ song.duracion_formateada }} min</span>
+                                            <div class="d-flex gap-2">
+                                                <button class="btn btn-link text-warning p-0 track-actions-btn" data-bs-toggle="modal" data-bs-target="#modalEditSong{{ song.id_mongo }}">
+                                                    <i class="bi bi-pencil-square"></i>
+                                                </button>
+                                                <button class="btn btn-link text-danger p-0 track-actions-btn" data-bs-toggle="modal" data-bs-target="#modalDeleteSong{{ song.id_mongo }}">
+                                                    <i class="bi bi-trash-fill"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="modal fade" id="modalEditSong{{ song.id_mongo }}" tabindex="-1" aria-hidden="true">
+                                        <div class="modal-dialog modal-dialog-centered">
+                                            <div class="modal-content">
+                                                <div class="modal-header">
+                                                    <h5 class="modal-title fw-bold">⚙️ Configurar Pista</h5>
+                                                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                                                </div>
+                                                <form action="{% url 'editar_cancion_artista' song.id_mongo %}" method="POST">
+                                                    {% csrf_token %}
+                                                    <div class="modal-body text-start">
+                                                        <div class="mb-3">
+                                                            <label class="form-label">Título de la Canción</label>
+                                                            <input type="text" class="form-control rm-input" name="titulo" value="{{ song.titulo }}" required>
+                                                        </div>
+                                                        <div class="mb-3">
+                                                            <label class="form-label">Duración (en segundos)</label>
+                                                            <input type="number" class="form-control rm-input" name="duracion" value="{{ song.duracion_raw }}" required>
+                                                        </div>
+                                                        <div class="mb-3">
+                                                            <label class="form-label">Calidad de Audio</label>
+                                                            <select class="form-select rm-input" name="calidadAudio">
+                                                                <option value="Alta" {% if song.calidadAudio == 'Alta' %}selected{% endif %}>Alta definición (Lossless)</option>
+                                                                <option value="Media" {% if song.calidadAudio == 'Media' %}selected{% endif %}>Media (MP3 320kbps)</option>
+                                                                <option value="Baja" {% if song.calidadAudio == 'Baja' %}selected{% endif %}>Baja (Ahorro de datos)</option>
+                                                            </select>
+                                                        </div>
+                                                    </div>
+                                                    <div class="modal-footer">
+                                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                                                        <button type="submit" class="btn btn-info fw-bold">Actualizar Track</button>
+                                                    </div>
+                                                </form>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="modal fade" id="modalDeleteSong{{ song.id_mongo }}" tabindex="-1" aria-hidden="true">
+                                        <div class="modal-dialog modal-dialog-centered modal-sm">
+                                            <div class="modal-content border-danger">
+                                                <div class="modal-body text-center p-4">
+                                                    <i class="bi bi-trash-fill text-danger display-6 mb-3 d-block"></i>
+                                                    <h6>¿Eliminar de la BD?</h6>
+                                                    <p class="text-muted small">Quitarás "<strong>{{ song.titulo }}</strong>" del catálogo musical NoSQL de este álbum.</p>
+                                                    <div class="d-flex justify-content-center gap-2 mt-3">
+                                                        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">No</button>
+                                                        <a href="{% url 'eliminar_cancion_artista' song.id_mongo %}" class="btn btn-sm btn-danger fw-bold">Sí, Remover</a>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {% empty %}
+                                    <div class="text-center text-muted py-4 small">
+                                        <i class="bi bi-music-note fs-4 d-block mb-2"></i>
+                                        Este álbum aún no tiene canciones cargadas en su listado interno.
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+
+                    <div class="modal fade" id="modalAddTrackDirect{{ album.id_mongo }}" tabindex="-1" aria-hidden="true">
+                        <div class="modal-dialog modal-dialog-centered">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title fw-bold">➕ Sumar Pista a "{{ album.titulo }}"</h5>
+                                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                                </div>
+                                <form action="{% url 'subir_cancion_artista' %}" method="POST">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="album_id" value="{{ album.id_mongo }}">
+                                    <div class="modal-body text-start">
+                                        <div class="mb-3">
+                                            <label class="form-label">Título de la Canción</label>
+                                            <input type="text" class="form-control rm-input" name="titulo" required placeholder="Ej. Never Gonna Give You Up">
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label">Duración (segundos)</label>
+                                            <input type="number" class="form-control rm-input" name="duracion" required placeholder="Ej. 212">
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label">Calidad de Audio de Fábrica</label>
+                                            <select class="form-select rm-input" name="calidadAudio">
+                                                <option value="Alta" selected>Alta definición (Dolby/Lossless)</option>
+                                                <option value="Media">Media (Estándar MP3)</option>
+                                                <option value="Baja">Baja (Compactado)</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                                        <button type="submit" class="btn btn-success fw-bold">Publicar en el Álbum</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="modal fade" id="modalEditarAlbum{{ album.id_mongo }}" tabindex="-1" aria-hidden="true">
+                        <div class="modal-dialog modal-dialog-centered">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title fw-bold">✏️ Editar Álbum</h5>
+                                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                                </div>
+                                <form action="{% url 'editar_album_artista' album.id_mongo %}" method="POST" enctype="multipart/form-data">
+                                    {% csrf_token %}
+                                    <div class="modal-body text-start">
+                                        <div class="mb-3">
+                                            <label class="form-label">Título del Álbum</label>
+                                            <input type="text" class="form-control rm-input" name="titulo" value="{{ album.titulo }}" required>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label">Fecha de Lanzamiento</label>
+                                            <input type="date" class="form-control rm-input" name="fecha_lanzamiento" value="{{ album.fecha_formateada }}" required style="color-scheme: dark;">
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label">Actualizar Portada (Opcional)</label>
+                                            <input type="file" class="form-control rm-input" name="imagen" accept="image/*">
+                                        </div>
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                                        <button type="submit" class="btn btn-info fw-bold">Actualizar Cambios</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="modal fade" id="modalEliminarAlbum{{ album.id_mongo }}" tabindex="-1" aria-hidden="true">
+                        <div class="modal-dialog modal-dialog-centered">
+                            <div class="modal-content border-danger">
+                                <div class="modal-header border-danger">
+                                    <h5 class="modal-title fw-bold text-danger"><i class="bi bi-exclamation-triangle-fill me-2"></i>Eliminar Álbum</h5>
+                                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                                </div>
+                                <div class="modal-body text-start">
+                                    <p>¿Estás completamente seguro de que deseas eliminar el álbum <strong>"{{ album.titulo }}"</strong>?</p>
+                                    <p class="text-danger small mb-0 fw-bold">Nota: Debes eliminar todas las canciones dentro del álbum antes de poder borrarlo.</p>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                                    <a href="{% url 'eliminar_album_artista' album.id_mongo %}" class="btn btn-danger fw-bold">Sí, Eliminar Álbum</a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {% empty %}
+                    <tr>
+                        <td colspan="4" class="text-center py-4 text-muted">Aún no has registrado ningún álbum en tu catálogo NoSQL.</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -152,11 +414,8 @@
                     <p class="text-muted small mb-0">Iniciaste sesión correctamente como Artista, pero tu cuenta no está enlazada a ningún perfil musical en la base de datos.</p>
                 </div>
             </div>
-            
             <hr class="border-secondary">
-            <p class="small text-white-50">
-                 Contacta al administrador del sistema para que asigne tu usuario al registro del artista correspondiente en el catálogo.
-            </p>
+            <p class="small text-white-50">Contacta al administrador del sistema para la asignación.</p>
         </div>
         {% endif %}
     </div>
@@ -166,9 +425,9 @@
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title fw-bold">💿 Registrar Nuevo Álbum</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
-                <form action="{% url 'crear_album_artista' %}" method="POST">
+                <form action="{% url 'crear_album_artista' %}" method="POST" enctype="multipart/form-data">
                     {% csrf_token %}
                     <div class="modal-body">
                         <div class="mb-3">
@@ -179,57 +438,14 @@
                             <label for="fecha_lanzamiento" class="form-label">Fecha de Lanzamiento</label>
                             <input type="date" class="form-control rm-input" id="fecha_lanzamiento" name="fecha_lanzamiento" required style="color-scheme: dark;">
                         </div>
+                        <div class="mb-3">
+                            <label for="imagen" class="form-label">Portada del Álbum</label>
+                            <input type="file" class="form-control rm-input" id="imagen" name="imagen" accept="image/*">
+                        </div>
                     </div>
                     <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary fw-bold" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
                         <button type="submit" class="btn fw-bold" style="background-color: var(--rm-accent); color: white;">Guardar Álbum</button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    </div>
-
-    <div class="modal fade" id="modalCancion" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title fw-bold">🎵 Agregar Pista al Catálogo</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <form action="{% url 'subir_cancion_artista' %}" method="POST">
-                    {% csrf_token %}
-                    <div class="modal-body">
-                        <div class="mb-3">
-                            <label for="album_id" class="form-label">Seleccionar Álbum Asociado</label>
-                            <select class="form-select rm-input" id="album_id" name="album_id" required style="color-scheme: dark;">
-                                <option value="" disabled selected>-- Elige un álbum de tu lista --</option>
-                                {% for alb in albums_artista %}
-                                    <option value="{{ alb.id_mongo }}">{{ alb.titulo }}</option>
-                                {% endfor %}
-                            </select>
-                            <div class="help-text">Si tu álbum no aparece, primero debes crearlo usando el botón de "Crear Álbum".</div>
-                        </div>
-                        <div class="mb-3">
-                            <label for="titulo_cancion" class="form-label">Título de la Canción</label>
-                            <input type="text" class="form-control rm-input" id="titulo_cancion" name="titulo" required placeholder="Ej. Moscow Mule">
-                        </div>
-                        <div class="mb-3">
-                            <label for="duracion" class="form-label">Duración de la pista</label>
-                            <input type="number" class="form-control rm-input" id="duracion" name="duracion" required placeholder="Ej. 180">
-                            <div class="help-text">Escribe la duración total calculada en **segundos**.</div>
-                        </div>
-                        <div class="mb-3">
-                            <label for="calidadAudio" class="form-label">Calidad del Audio de Origen</label>
-                            <select class="form-select rm-input" id="calidadAudio" name="calidadAudio" style="color-scheme: dark;">
-                                <option value="Alta" selected>Alta definición (Dolby/Lossless)</option>
-                                <option value="Media">Media (Estándar MP3 320kbps)</option>
-                                <option value="Baja">Baja (Compreso para ahorro de datos)</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary fw-bold" data-bs-dismiss="modal">Cerrar</button>
-                        <button type="submit" class="btn fw-bold" style="background-color: var(--rm-accent); color: white;">Publicar Canción</button>
                     </div>
                 </form>
             </div>
