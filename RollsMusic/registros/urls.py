@@ -65,7 +65,12 @@ urlpatterns = [
     path('dashboard/usuario/pagar/', views.procesar_pago, name='procesar_pago'),
     path('dashboard/artista/', views.dashboard_artista, name='dashboard_artista'),
     path('dashboard/artista/nuevo-album/', views.crear_album_artista, name='crear_album_artista'), 
+    path('dashboard/artista/editar-album/<str:id>/', views.editar_album_artista, name='editar_album_artista'),
+    path('dashboard/artista/eliminar-album/<str:id>/', views.eliminar_album_artista, name='eliminar_album_artista'),
     path('dashboard/artista/nueva-cancion/', views.subir_cancion_artista, name='subir_cancion_artista'),
+    # CRUD CANCIONES DESDE EL PANEL DE ARTISTA
+    path('dashboard/artista/editar-cancion/<str:id>/', views.editar_cancion_artista, name='editar_cancion_artista'),
+    path('dashboard/artista/eliminar-cancion/<str:id>/', views.eliminar_cancion_artista, name='eliminar_cancion_artista'),
     
     # TRIGGER DE REPRODUCCIONES
     path('cancion/reproducir/<int:id_cancion>/', views.registrar_reproduccion, name='registrar_reproduccion'),

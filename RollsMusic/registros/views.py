@@ -1311,6 +1311,8 @@ def _obtener_artista_de_sesion(request):
     })
 
 
+from bson import ObjectId
+
 @verificar_rol(['Artista', 'Admin'])
 def dashboard_artista(request):
     if not request.session.get('usuario_id'):
@@ -1318,128 +1320,218 @@ def dashboard_artista(request):
         return redirect('login')
 
     artista = _obtener_artista_de_sesion(request)
-
     if not artista:
         messages.warning(request, "Tu cuenta de artista no tiene un perfil vinculado. Contacta a un administrador.")
         return render(request, 'dashboards/artista.html', {
-            'artista': None, 'total_reproducciones': 0, 'total_regalias': 0.0, 'canciones_recientes': []
+            'artista': None, 'total_reproducciones': 0, 'total_regalias': 0.0, 'canciones_recientes': [], 'albums_artista': []
         })
 
     id_artista_metrica = artista.get('idArtistaSQL') or str(artista['_id'])
-
     total_reproducciones = 0
     total_regalias = 0.0
 
+    # [MÉTRICAS: AGGREGATION PIPELINES (Se mantiene intacto)]
     try:
         pipeline_reproducciones = [
-            {
-                "$lookup": {
-                    "from": "canciones",
-                    "localField": "idCancion",
-                    "foreignField": "idCancionSQL",
-                    "as": "cancion_info"
-                }
-            },
-            { "$unwind": "$cancion_info" },
-            {
-                "$match": {
-                    "$or": [
-                        {"cancion_info.idArtista": id_artista_metrica},
-                        {"cancion_info.idArtista": int(id_artista_metrica) if str(id_artista_metrica).isdigit() else None}
-                    ]
-                }
-            },
-            {
-                "$group": {
-                    "_id": None,
-                    "total_segundos": {"$sum": "$duracionEscuchada"}
-                }
-            }
+            {"$lookup": {"from": "canciones", "localField": "idCancion", "foreignField": "idCancionSQL", "as": "cancion_info"}},
+            {"$unwind": "$cancion_info"},
+            {"$match": {"$or": [{"cancion_info.idArtista": id_artista_metrica}, {"cancion_info.idArtista": int(id_artista_metrica) if str(id_artista_metrica).isdigit() else None}]}},
+            {"$group": {"_id": None, "total_segundos": {"$sum": "$duracionEscuchada"}}}
         ]
-
         resultado_rep = list(db.reproducciones.aggregate(pipeline_reproducciones))
         if resultado_rep:
             total_reproducciones = round(resultado_rep[0].get('total_segundos', 0) / 60)
 
         pipeline_regalias = [
-            {
-                "$match": {
-                    "$or": [
-                        {"idArtista": id_artista_metrica},
-                        {"idArtista": int(id_artista_metrica) if str(id_artista_metrica).isdigit() else None}
-                    ]
-                }
-            },
-            {
-                "$group": {
-                    "_id": None,
-                    "total_dinero": {"$sum": "$monto"}
-                }
-            }
+            {"$match": {"$or": [{"idArtista": id_artista_metrica}, {"idArtista": int(id_artista_metrica) if str(id_artista_metrica).isdigit() else None}]}},
+            {"$group": {"_id": None, "total_dinero": {"$sum": "$monto"}}}
         ]
-
         resultado_reg = list(db.regalias.aggregate(pipeline_regalias))
         if resultado_reg:
             total_regalias = round(resultado_reg[0].get('total_dinero', 0.0), 2)
-
     except Exception as e:
         print(f"[ERROR Métricas Artista]: {str(e)}")
 
+    # 1. BUSCAR ÁLBERMES DEL ARTISTA
+    id_artista_str = str(id_artista_metrica)
+    id_artista_int = int(id_artista_str) if id_artista_str.isdigit() else None
+
+    condiciones_albumes = [
+        {"idArtista": id_artista_str}, {"idArtista": id_artista_int},
+        {"Artista_idArtista": id_artista_str}, {"Artista_idArtista": id_artista_int}
+    ]
+
+    albumes_artista_db = list(db.albumes.find({"$or": condiciones_albumes}))
+    
+    # Preparar el molde de canciones vacías dentro de cada álbum
+    for alb in albumes_artista_db:
+        alb['id_mongo'] = str(alb['_id'])
+        alb['canciones'] = [] # <-- Aquí inyectaremos sus pistas correspondientes
+        
+        img_name = alb.get('imagen')
+        if img_name and img_name not in ['default_album.png', 'default_album.jpg', '']:
+            alb['imagen_url'] = f"{settings.MEDIA_URL}albumes/{img_name}"
+        else:
+            alb['imagen_url'] = None
+            
+        fecha_raw = alb.get('fechaLanzamiento', '')
+        if fecha_raw:
+            if hasattr(fecha_raw, 'strftime'):
+                alb['fecha_formateada'] = fecha_raw.strftime('%Y-%m-%d')
+            elif isinstance(fecha_raw, str):
+                alb['fecha_formateada'] = fecha_raw.split('T')[0]
+            else:
+                alb['fecha_formateada'] = str(fecha_raw)
+        else:
+            alb['fecha_formateada'] = ""
+
+    # 2. CARGAR TODAS LAS CANCIONES DEL ARTISTA
     canciones_artista = list(db.canciones.find({
         "$or": [
             {"idArtista": id_artista_metrica},
             {"idArtista": int(id_artista_metrica) if str(id_artista_metrica).isdigit() else None}
         ]
-    }).limit(5))
+    }))
 
+    canciones_recientes = canciones_artista[:10] # Primeras 10 para el top general
+
+    # 3. DISTRIBUIR LAS CANCIONES A SUS RESPECTIVOS ÁLBUMES
     for c in canciones_artista:
+        c['id_mongo'] = str(c['_id'])
         segs = c.get('duracionSegundos') or c.get('duracion') or 0
         if isinstance(segs, int) and segs > 0:
             c['duracion_formateada'] = f"{segs // 60}:{segs % 60:02d}"
+            c['duracion_raw'] = segs
         else:
             c['duracion_formateada'] = "0:00"
+            c['duracion_raw'] = 0
+            
+        id_alb_cancion = str(c.get('idAlbum') or c.get('Album_idAlbum') or '')
+        
+        # Cruzar con el álbum contenedor
+        for alb in albumes_artista_db:
+            id_referencia_alb = str(alb.get('idAlbumSQL', ''))
+            if id_alb_cancion == alb['id_mongo'] or id_alb_cancion == id_referencia_alb:
+                alb['canciones'].append(c)
+                c['imagen_url'] = alb['imagen_url']
+                break
 
+    # Contexto básico de perfil de artista
     artista_context = {
         'nombreArtistico': artista.get('nombreArtistico') or artista.get('nombre') or 'Desconocido',
         'verificado': bool(artista.get('verificado', False)),
         'genero': artista.get('genero') or artista.get('generoPrincipal') or 'Independiente',
         'pais': artista.get('pais', 'No especificado'),
-        'biografia': artista.get('biografia', 'Sin biografía disponible.')
     }
-
     img_name = artista.get('imagen')
     if img_name and img_name != 'default_artist.png':
-        if not img_name.startswith('artistas/'):
-            img_name = f"artistas/{img_name}"
+        if not img_name.startswith('artistas/'): img_name = f"artistas/{img_name}"
         artista_context['imagen_url'] = f"{settings.STATIC_URL}images/{img_name}"
     else:
         artista_context['imagen_url'] = f"{settings.STATIC_URL}images/default_artist.png"
 
-    # CARGAR ÁLBUMES DEL ARTISTA PARA EL MODAL (comparando string e int)
-    id_artista_str = str(id_artista_metrica)
-    id_artista_int = int(id_artista_str) if id_artista_str.isdigit() else None
-
-    condiciones_albumes = [
-        {"idArtista": id_artista_str},
-        {"idArtista": id_artista_int},
-        {"Artista_idArtista": id_artista_str},
-        {"Artista_idArtista": id_artista_int}
-    ]
-
-    albumes_artista_db = list(db.albumes.find({"$or": condiciones_albumes}))
-    for alb in albumes_artista_db:
-        alb['id_mongo'] = str(alb['_id'])
-
-    context = {
+    return render(request, 'dashboards/artista.html', {
         'artista': artista_context,
         'total_reproducciones': total_reproducciones,
         'total_regalias': total_regalias,
-        'canciones_recientes': canciones_artista,
+        'canciones_recientes': canciones_recientes,
         'albums_artista': albumes_artista_db
-    }
+    })
 
-    return render(request, 'dashboards/artista.html', context)
 
+@verificar_rol(['Artista', 'Admin'])
+def editar_cancion_artista(request, id):
+    if request.method == 'POST':
+        try:
+            filtro = {"_id": ObjectId(id)} if len(str(id)) == 24 else {"idCancionSQL": int(id)}
+            db.canciones.update_one(filtro, {
+                "$set": {
+                    "titulo": request.POST.get('titulo'),
+                    "duracionSegundos": int(request.POST.get('duracion') or 0),
+                    "calidadAudio": request.POST.get('calidadAudio')
+                }
+            })
+            messages.success(request, "Pista de audio actualizada con éxito.")
+        except Exception as e:
+            messages.error(request, f"Error al actualizar la canción: {str(e)}")
+    return redirect('dashboard_artista')
+
+
+@verificar_rol(['Artista', 'Admin'])
+def eliminar_cancion_artista(request, id):
+    try:
+        filtro = {"_id": ObjectId(id)} if len(str(id)) == 24 else {"idCancionSQL": int(id)}
+        db.canciones.delete_one(filtro)
+        messages.success(request, "Canción eliminada del catálogo permanentemente.")
+    except Exception as e:
+        messages.error(request, f"Error al intentar eliminar la canción: {str(e)}")
+    return redirect('dashboard_artista')
+
+
+@verificar_rol(['Artista', 'Admin'])
+def editar_album_artista(request, id):
+    artista = _obtener_artista_de_sesion(request)
+    if not artista:
+        return redirect('dashboard_artista')
+
+    if request.method == 'POST':
+        filtro = {"_id": ObjectId(id)} if len(str(id)) == 24 else {"idAlbumSQL": int(id)}
+        album = db.albumes.find_one(filtro)
+
+        if album:
+            nueva_imagen = request.FILES.get('imagen')
+            imagen_nombre = album.get('imagen', 'default_album.jpg')
+
+            if nueva_imagen:
+                fs = FileSystemStorage(location=os.path.join(settings.MEDIA_ROOT, 'albumes'))
+                filename = fs.save(nueva_imagen.name, nueva_imagen)
+                imagen_nombre = filename
+
+            fecha_lanzamiento = request.POST.get('fecha_lanzamiento') or album.get('fechaLanzamiento')
+
+            db.albumes.update_one(filtro, {
+                "$set": {
+                    "titulo": request.POST.get('titulo'),
+                    "fechaLanzamiento": fecha_lanzamiento,
+                    "imagen": imagen_nombre
+                }
+            })
+            messages.success(request, f"Álbum '{request.POST.get('titulo')}' actualizado con éxito.")
+    
+    return redirect('dashboard_artista')
+
+@verificar_rol(['Artista', 'Admin'])
+def eliminar_album_artista(request, id):
+    artista = _obtener_artista_de_sesion(request)
+    if not artista:
+        return redirect('dashboard_artista')
+
+    try:
+        filtro = {"_id": ObjectId(id)} if len(str(id)) == 24 else {"idAlbumSQL": int(id)}
+        album = db.albumes.find_one(filtro)
+
+        if album:
+            id_referencia = album.get('idAlbumSQL') or str(album['_id'])
+            canciones_vinculadas = db.canciones.count_documents({
+                "$or": [{"idAlbum": id_referencia}, {"Album_idAlbum": id_referencia}, {"idAlbum": str(id_referencia)}]
+            })
+
+            if canciones_vinculadas > 0:
+                messages.error(request, f"Operación denegada. El álbum contiene {canciones_vinculadas} canciones. Elimínalas primero.")
+            else:
+                imagen_a_borrar = album.get('imagen')
+                db.albumes.delete_one(filtro)
+
+                if imagen_a_borrar and imagen_a_borrar not in ['default_album.png', 'default_album.jpg', '']:
+                    ruta_completa = os.path.join(settings.MEDIA_ROOT, 'albumes', imagen_a_borrar)
+                    if os.path.exists(ruta_completa):
+                        os.remove(ruta_completa)
+                        
+                messages.success(request, "Álbum eliminado correctamente.")
+    except Exception as e:
+        messages.error(request, f"Error al intentar eliminar el álbum: {str(e)}")
+
+    return redirect('dashboard_artista')
 
 # ==========================================
 # PROCESOS COMPLEMENTARIOS (PAGOS, MANTENIMIENTO, PLAYLISTS)
